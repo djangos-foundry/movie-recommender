@@ -1,0 +1,291 @@
+from django.db.models import Count
+from rest_framework import status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.generics import (
+    ListCreateAPIView,
+    RetrieveUpdateDestroyAPIView,
+    get_object_or_404,
+)
+
+from .models import MovieList, Movie, MovieListItem
+from .serializers import (
+    MovieListSerializer,
+    MovieListItemSerializer,
+    MovieSerializer,
+    AddMovieToListSerializer,
+)
+from .services.tmdb import tmdb_service, format_poster_url, format_backdrop_url, normalize_genres
+
+
+class MovieListIndexView(ListCreateAPIView):
+    """
+    GET /api/lists/ - List all lists with item counts.
+    POST /api/lists/ - Create a new list.
+    """
+    serializer_class = MovieListSerializer
+
+    def get_queryset(self):
+        return MovieList.objects.annotate(items_count=Count('items')).order_by('created_at')
+
+
+class MovieListDetailView(RetrieveUpdateDestroyAPIView):
+    """
+    GET /api/lists/<int:pk>/ - Retrieve list details with items.
+    PUT/PATCH /api/lists/<int:pk>/ - Update list.
+    DELETE /api/lists/<int:pk>/ - Delete list.
+    """
+    serializer_class = MovieListSerializer
+    queryset = MovieList.objects.annotate(items_count=Count('items'))
+
+
+class MovieListMoviesView(APIView):
+    """
+    GET /api/lists/<int:pk>/movies/ - List all movies in this list.
+    POST /api/lists/<int:pk>/movies/ - Add a movie to this list.
+    """
+
+    def get(self, request, pk):
+        movie_list = get_object_or_404(MovieList, pk=pk)
+        items = movie_list.items.select_related('movie').all()
+        serializer = MovieListItemSerializer(items, many=True)
+        return Response(serializer.data)
+
+    def post(self, request, pk):
+        movie_list = get_object_or_404(MovieList, pk=pk)
+        serializer = AddMovieToListSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        tmdb_id = data.get('tmdb_id')
+        movie_payload = data.get('movie') or {}
+
+        if not tmdb_id:
+            tmdb_id = movie_payload.get('tmdb_id') or movie_payload.get('id')
+
+        if not tmdb_id:
+            return Response(
+                {"error": "Valid tmdb_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            tmdb_id = int(tmdb_id)
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "tmdb_id must be an integer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Retrieve or create Movie instance
+        movie = Movie.objects.filter(tmdb_id=tmdb_id).first()
+        if not movie:
+            # If movie details are not in payload or payload is incomplete, fetch from TMDB service
+            if not movie_payload.get('title'):
+                fetched_details = tmdb_service.get_movie_details(tmdb_id)
+                if fetched_details:
+                    movie_payload = fetched_details
+
+            title = movie_payload.get('title') or f"Movie #{tmdb_id}"
+            original_title = movie_payload.get('original_title') or title
+            overview = movie_payload.get('overview', '')
+            poster_path = format_poster_url(movie_payload.get('poster_path', ''))
+            backdrop_path = format_backdrop_url(movie_payload.get('backdrop_path', ''))
+            release_date = str(movie_payload.get('release_date', ''))
+            vote_average = float(movie_payload.get('vote_average') or 0.0)
+            vote_count = int(movie_payload.get('vote_count') or 0)
+            genres = normalize_genres(movie_payload.get('genres'))
+            runtime = int(movie_payload.get('runtime') or 0)
+
+            movie, _ = Movie.objects.get_or_create(
+                tmdb_id=tmdb_id,
+                defaults={
+                    'title': title,
+                    'original_title': original_title,
+                    'overview': overview,
+                    'poster_path': poster_path,
+                    'backdrop_path': backdrop_path,
+                    'release_date': release_date,
+                    'vote_average': vote_average,
+                    'vote_count': vote_count,
+                    'genres': genres,
+                    'runtime': runtime,
+                }
+            )
+
+        # Check for duplicate in the same list
+        existing_item = MovieListItem.objects.filter(list=movie_list, movie=movie).first()
+        if existing_item:
+            return Response(
+                {
+                    "error": "Movie is already in this list.",
+                    "item": MovieListItemSerializer(existing_item).data,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        item = MovieListItem.objects.create(
+            list=movie_list,
+            movie=movie,
+            status=data.get('status', 'plan_to_watch'),
+            user_rating=data.get('user_rating'),
+            user_notes=data.get('user_notes', ''),
+        )
+
+        return Response(
+            MovieListItemSerializer(item).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class MovieListItemDetailView(RetrieveUpdateDestroyAPIView):
+    """
+    GET /api/list-items/<int:pk>/ - Retrieve item details.
+    PATCH/PUT /api/list-items/<int:pk>/ - Update status, user_rating, user_notes.
+    DELETE /api/list-items/<int:pk>/ - Remove movie item from list.
+    """
+    queryset = MovieListItem.objects.select_related('list', 'movie').all()
+    serializer_class = MovieListItemSerializer
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', True)
+        instance = self.get_object()
+
+        # Update fields if present in request data
+        if 'status' in request.data:
+            instance.status = request.data['status']
+        if 'user_rating' in request.data:
+            rating = request.data['user_rating']
+            instance.user_rating = int(rating) if rating is not None else None
+        if 'user_notes' in request.data:
+            instance.user_notes = request.data['user_notes']
+
+        instance.save()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+
+class TMDBSearchView(APIView):
+    """
+    GET /api/tmdb/search/?q=... - Search movies via TMDB or fallback mock data.
+    """
+
+    def get(self, request):
+        query = request.query_params.get('q', request.query_params.get('query', ''))
+        page = request.query_params.get('page', 1)
+        try:
+            page = int(page)
+        except (ValueError, TypeError):
+            page = 1
+
+        results = tmdb_service.search_movies(query, page=page)
+        return Response(results)
+
+
+class TMDBMovieDetailView(APIView):
+    """
+    GET /api/tmdb/movie/<int:tmdb_id>/ - Fetch movie detail by TMDB ID.
+    """
+
+    def get(self, request, tmdb_id):
+        details = tmdb_service.get_movie_details(tmdb_id)
+        if not details:
+            return Response(
+                {"error": f"Movie with tmdb_id {tmdb_id} not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(details)
+
+
+class SeedDataView(APIView):
+    """
+    GET or POST /api/seed/ - Seeds default categories and sample movie.
+    """
+
+    def get(self, request):
+        return self._seed()
+
+    def post(self, request):
+        return self._seed()
+
+    def _seed(self):
+        default_lists = [
+            {
+                "name": "Adventure",
+                "color": "#3b82f6",
+                "description": "Epic journeys, exploration, and quest-filled movies",
+            },
+            {
+                "name": "Sci-Fi",
+                "color": "#8b5cf6",
+                "description": "Mind-bending science fiction and futuristic stories",
+            },
+            {
+                "name": "Watchlist",
+                "color": "#f5c518",
+                "description": "Movies queued up to watch soon",
+            },
+            {
+                "name": "Favorites",
+                "color": "#ef4444",
+                "description": "All-time favorite movies and masterpieces",
+            },
+        ]
+
+        created_lists = []
+        for lst_info in default_lists:
+            obj, _ = MovieList.objects.get_or_create(
+                name=lst_info["name"],
+                defaults={
+                    "color": lst_info["color"],
+                    "description": lst_info["description"],
+                },
+            )
+            created_lists.append(obj)
+
+        # Seed Interstellar in "Adventure"
+        adventure_list = MovieList.objects.get(name="Adventure")
+        interstellar_data = tmdb_service.get_movie_details(157336)
+
+        interstellar_movie, _ = Movie.objects.get_or_create(
+            tmdb_id=157336,
+            defaults={
+                "title": interstellar_data["title"],
+                "original_title": interstellar_data["original_title"],
+                "overview": interstellar_data["overview"],
+                "poster_path": interstellar_data["poster_path"],
+                "backdrop_path": interstellar_data["backdrop_path"],
+                "release_date": interstellar_data["release_date"],
+                "vote_average": interstellar_data["vote_average"],
+                "vote_count": interstellar_data["vote_count"],
+                "genres": interstellar_data["genres"],
+                "runtime": interstellar_data["runtime"],
+            },
+        )
+
+        item, created = MovieListItem.objects.get_or_create(
+            list=adventure_list,
+            movie=interstellar_movie,
+            defaults={
+                "status": "completed",
+                "user_rating": 10,
+                "user_notes": "A masterpiece of space exploration and love transcending dimensions.",
+            },
+        )
+        if not created:
+            item.status = "completed"
+            item.user_rating = 10
+            item.user_notes = "A masterpiece of space exploration and love transcending dimensions."
+            item.save()
+
+        # Re-fetch all lists with counts
+        all_lists = MovieList.objects.annotate(items_count=Count('items')).order_by('created_at')
+        serializer = MovieListSerializer(all_lists, many=True)
+
+        return Response(
+            {
+                "message": "Database successfully seeded with default categories and Interstellar!",
+                "lists": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )

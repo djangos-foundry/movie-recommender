@@ -1,0 +1,15 @@
+{
+  "name": "movie-recommender-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Movie Recommendation and Tracking App Monorepo",
+  "scripts": {
+    "start": "start_app.bat",
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "backend": ".\\.venv\\py314\\Scripts\\python.exe backend\\manage.py runserver",
+    "migrate": ".\\.venv\\py314\\Scripts\\python.exe backend\\manage.py migrate",
+    "seed": ".\\.venv\\py314\\Scripts\\python.exe backend\\test_backend.py"
+  }
+}
+
