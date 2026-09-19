@@ -12,6 +12,10 @@ __pycache__/
 *.env
 !.env.example
 
+# Database
+*.sqlite3
+db.sqlite3
+
 # Node
 node_modules/
 
