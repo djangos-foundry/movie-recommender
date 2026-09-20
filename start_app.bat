@@ -1,39 +1,66 @@
 @echo off
 title CineTrack Movie App Launcher
+setlocal EnableDelayedExpansion
+
+set "ROOT_DIR=%~dp0"
+cd /d "%ROOT_DIR%"
+
 echo ======================================================================
 echo           Starting CineTrack Movie Recommender & Tracker
 echo ======================================================================
 echo.
 
-set "ROOT_DIR=%~dp0"
-cd /d "%ROOT_DIR%"
+:: 1. Clear any leftover processes on ports 8000 & 5173
+echo [1/4] Ensuring ports 8000 and 5173 are free...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8000" ^| findstr "LISTENING"') do (
+    taskkill /F /T /PID %%a >nul 2>&1
+)
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":5173" ^| findstr "LISTENING"') do (
+    taskkill /F /T /PID %%a >nul 2>&1
+)
 
-:: Find Python in virtual environment
+:: 2. Find Python virtual environment
 if exist "%ROOT_DIR%\.venv\py314\Scripts\python.exe" (
     set "PYTHON_EXE=%ROOT_DIR%\.venv\py314\Scripts\python.exe"
 ) else (
     set "PYTHON_EXE=python"
 )
 
-echo [1/3] Launching Django REST backend on port 8000...
-start "CineTrack Backend (Django API)" cmd /k "title CineTrack Backend && cd /d "%ROOT_DIR%" && "%PYTHON_EXE%" backend\manage.py runserver 0.0.0.0:8000"
+:: 3. Run database migrations
+echo [2/4] Verifying database schema...
+"%PYTHON_EXE%" backend\manage.py migrate --noinput
 
-echo [2/3] Launching React Vite frontend on port 5173...
-start "CineTrack Frontend (React Vite)" cmd /k "title CineTrack Frontend && cd /d "%ROOT_DIR%\frontend" && npm.cmd run dev"
+:: 4. Start backend and frontend in background of this window
+echo [3/4] Launching Django API (port 8000) and React Vite (port 5173)...
+start /b "" "%PYTHON_EXE%" backend\manage.py runserver 0.0.0.0:8000
+start /b "" cmd /c "cd /d "%ROOT_DIR%\frontend" && npm.cmd run dev"
 
-echo [3/3] Opening browser at http://localhost:5173 ...
+:: 5. Open browser
+echo [4/4] Opening browser at http://localhost:5173 ...
 timeout /t 3 /nobreak >nul
 start http://localhost:5173
 
 echo.
 echo ======================================================================
-echo   Both servers are now running!
-echo   - Web App UI:     http://localhost:5173
-echo   - Backend API:    http://localhost:8000/api/
+echo   CineTrack is now running!
+echo   - Web UI:      http://localhost:5173
+echo   - Backend API: http://localhost:8000/api/
 echo.
-echo   (You can minimize this window. Keep the backend and frontend
-echo    console windows open while using the application.)
+echo   Both servers are running inside this single terminal.
+echo   When you are done, press any key or close this window to STOP all servers.
 echo ======================================================================
 echo.
-pause
 
+:: Keep window open until user presses a key or closes terminal
+pause >nul
+
+echo.
+echo Stopping CineTrack servers...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8000" ^| findstr "LISTENING"') do (
+    taskkill /F /T /PID %%a >nul 2>&1
+)
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":5173" ^| findstr "LISTENING"') do (
+    taskkill /F /T /PID %%a >nul 2>&1
+)
+echo All servers stopped cleanly.
+timeout /t 2 /nobreak >nul

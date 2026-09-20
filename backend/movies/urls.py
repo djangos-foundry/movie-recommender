@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (
     MovieListIndexView,
+    MovieListReorderView,
     MovieListDetailView,
     MovieListMoviesView,
     MovieListItemDetailView,
@@ -12,6 +13,7 @@ from .views import (
 urlpatterns = [
     # Lists
     path('lists/', MovieListIndexView.as_view(), name='movie-list-index'),
+    path('lists/reorder/', MovieListReorderView.as_view(), name='movie-list-reorder'),
     path('lists/<int:pk>/', MovieListDetailView.as_view(), name='movie-list-detail'),
     path('lists/<int:pk>/movies/', MovieListMoviesView.as_view(), name='movie-list-movies'),
 

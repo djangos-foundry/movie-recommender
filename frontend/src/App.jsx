@@ -1,28 +1,52 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Sidebar from './components/Sidebar';
 import MovieList from './components/MovieList';
-import MovieDetail from './components/MovieDetail';
+import MovieDetailPage from './components/MovieDetailPage';
 import MovieSearchModal from './components/MovieSearchModal';
 import NewListModal from './components/NewListModal';
+import ActivityRail from './components/ActivityRail';
+import SettingsModal, { DEFAULT_SHORTCUTS } from './components/SettingsModal';
 import {
   getLists,
   createList,
+  updateList,
+  reorderLists,
+  deleteList,
   getListMovies,
   addMovieToList,
   updateListItem,
   removeListItem,
   seedSampleData,
 } from './api/client';
+
 import { AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
+  // Sidebar open/collapse state (default open)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // Keyboard shortcuts state (persisted to localStorage)
+  const [shortcuts, setShortcuts] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cinetrack_shortcuts');
+      return saved ? { ...DEFAULT_SHORTCUTS, ...JSON.parse(saved) } : DEFAULT_SHORTCUTS;
+    } catch (e) {
+      return DEFAULT_SHORTCUTS;
+    }
+  });
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
   // Lists & active navigation state
   const [lists, setLists] = useState([]);
-  const [activeListId, setActiveListId] = useState('all'); // 'all' or list.id
-  const [currentMovies, setCurrentMovies] = useState([]);
+  const [activeListId, setActiveListId] = useState('all'); // 'all', 'plan_to_watch', 'watching', 'completed', or list.id
+  const [allMovies, setAllMovies] = useState([]);
 
-  // Selected item for right detail panel
+  // View mode: 'list' or 'movie-detail'
+  const [viewMode, setViewMode] = useState('list');
   const [selectedItem, setSelectedItem] = useState(null);
+
+  // Card size: 'small', 'medium', 'large', 'extra-large'
+  const [cardSize, setCardSize] = useState('medium');
 
   // Modals
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -39,6 +63,34 @@ export default function App() {
     setToastMessage({ message, type });
     setTimeout(() => setToastMessage(null), 4000);
   };
+
+  const handleToggleSidebar = () => {
+    setIsSidebarOpen((prev) => !prev);
+  };
+
+  const handleSaveShortcuts = (newShortcuts) => {
+    setShortcuts(newShortcuts);
+    try {
+      localStorage.setItem('cinetrack_shortcuts', JSON.stringify(newShortcuts));
+    } catch (e) {
+      console.error('Failed to save shortcuts:', e);
+    }
+    showToast('Keybindings updated!', 'success');
+  };
+
+  const handleResetShortcuts = () => {
+    setShortcuts(DEFAULT_SHORTCUTS);
+    try {
+      localStorage.removeItem('cinetrack_shortcuts');
+    } catch (e) {
+      console.error('Failed to reset shortcuts:', e);
+    }
+    showToast('Keybindings reset to default', 'info');
+  };
+
+  // Helper to identify standard core lists
+  const isCoreList = (name) =>
+    ['plan to watch', 'watching', 'completed'].includes((name || '').toLowerCase().trim());
 
   // 1. Fetch all lists
   const fetchLists = useCallback(async () => {
@@ -76,123 +128,344 @@ export default function App() {
     fetchLists();
   }, [fetchLists]);
 
-  // 2. Fetch movies for active list or aggregate for 'all'
-  const fetchMovies = useCallback(async () => {
+  // 2. Fetch all movies across all lists
+  const fetchAllMovies = useCallback(async () => {
     if (backendError && lists.length === 0) return;
 
     try {
       setIsLoadingMovies(true);
-      if (activeListId === 'all') {
-        // Aggregate movies from all lists
-        const allItems = [];
-        const seenMovieIds = new Set();
+      const all = [];
+      const seenItemIds = new Set();
 
-        for (const list of lists) {
-          try {
-            const items = await getListMovies(list.id);
-            if (Array.isArray(items)) {
-              for (const item of items) {
-                if (!seenMovieIds.has(item.movie?.id || item.id)) {
-                  seenMovieIds.add(item.movie?.id || item.id);
-                  allItems.push(item);
-                }
+      for (const list of lists) {
+        try {
+          const items = await getListMovies(list.id);
+          if (Array.isArray(items)) {
+            for (const item of items) {
+              if (!seenItemIds.has(item.id)) {
+                seenItemIds.add(item.id);
+                all.push(item);
               }
             }
-          } catch (e) {
-            console.warn(`Could not load movies for list ${list.id}:`, e);
           }
+        } catch (e) {
+          console.warn(`Could not load movies for list ${list.id}:`, e);
         }
-        setCurrentMovies(allItems);
-      } else {
-        const items = await getListMovies(activeListId);
-        setCurrentMovies(Array.isArray(items) ? items : []);
       }
+      setAllMovies(all);
     } catch (err) {
       console.error('Error fetching movies:', err);
-      showToast('Could not load movies for this list', 'error');
+      showToast('Could not load movies', 'error');
     } finally {
       setIsLoadingMovies(false);
     }
-  }, [activeListId, lists, backendError]);
+  }, [lists, backendError]);
 
   useEffect(() => {
-    if (lists.length > 0 || activeListId === 'all') {
-      fetchMovies();
+    if (lists.length > 0) {
+      fetchAllMovies();
     }
-  }, [activeListId, lists, fetchMovies]);
+  }, [lists, fetchAllMovies]);
 
-  // Keep selectedItem in sync if currentMovies updates
+  // Keep selectedItem in sync if allMovies updates
   useEffect(() => {
     if (selectedItem) {
-      const updated = currentMovies.find((item) => item.id === selectedItem.id);
+      const updated = allMovies.find((item) => item.id === selectedItem.id);
       if (updated) {
         setSelectedItem(updated);
       }
     }
-  }, [currentMovies]);
+  }, [allMovies, selectedItem]);
+
+  // Accurate movie counts for each status across all unique movies
+  const statusCounts = useMemo(() => {
+    const counts = { plan_to_watch: 0, watching: 0, completed: 0 };
+    const seen = new Set();
+    for (const item of allMovies) {
+      const mId = item.movie?.tmdb_id || item.movie?.id || item.id;
+      if (!seen.has(mId)) {
+        seen.add(mId);
+        if (item.status === 'plan_to_watch') counts.plan_to_watch++;
+        else if (item.status === 'watching') counts.watching++;
+        else if (item.status === 'completed') counts.completed++;
+      }
+    }
+    return counts;
+  }, [allMovies]);
+
+  // Total unique movies count across all lists
+  const totalAllCount = useMemo(() => {
+    const seen = new Set();
+    for (const item of allMovies) {
+      const mId = item.movie?.tmdb_id || item.movie?.id || item.id;
+      seen.add(mId);
+    }
+    return seen.size;
+  }, [allMovies]);
+
+  // Filtered movies to display based on activeListId (All, Status, or Custom List)
+  const displayedMovies = useMemo(() => {
+    if (activeListId === 'all') {
+      const seen = new Set();
+      const result = [];
+      for (const item of allMovies) {
+        const mId = item.movie?.tmdb_id || item.movie?.id || item.id;
+        if (!seen.has(mId)) {
+          seen.add(mId);
+          result.push(item);
+        }
+      }
+      return result;
+    }
+
+    if (activeListId === 'plan_to_watch') {
+      const seen = new Set();
+      const result = [];
+      for (const item of allMovies) {
+        if (item.status === 'plan_to_watch') {
+          const mId = item.movie?.tmdb_id || item.movie?.id || item.id;
+          if (!seen.has(mId)) {
+            seen.add(mId);
+            result.push(item);
+          }
+        }
+      }
+      return result;
+    }
+
+    if (activeListId === 'watching') {
+      const seen = new Set();
+      const result = [];
+      for (const item of allMovies) {
+        if (item.status === 'watching') {
+          const mId = item.movie?.tmdb_id || item.movie?.id || item.id;
+          if (!seen.has(mId)) {
+            seen.add(mId);
+            result.push(item);
+          }
+        }
+      }
+      return result;
+    }
+
+    if (activeListId === 'completed') {
+      const seen = new Set();
+      const result = [];
+      for (const item of allMovies) {
+        if (item.status === 'completed') {
+          const mId = item.movie?.tmdb_id || item.movie?.id || item.id;
+          if (!seen.has(mId)) {
+            seen.add(mId);
+            result.push(item);
+          }
+        }
+      }
+      return result;
+    }
+
+    // Custom list by ID
+    return allMovies.filter(
+      (item) => item.list === Number(activeListId) || item.list === activeListId
+    );
+  }, [activeListId, allMovies]);
+
+  // Current active list metadata
+  const currentListObj = useMemo(() => {
+    if (activeListId === 'all') {
+      return { id: 'all', name: 'All Movies', color: '#f5c518' };
+    }
+    if (activeListId === 'plan_to_watch') {
+      return { id: 'plan_to_watch', name: 'Plan to Watch', color: '#3b82f6' };
+    }
+    if (activeListId === 'watching') {
+      return { id: 'watching', name: 'Watching', color: '#f59e0b' };
+    }
+    if (activeListId === 'completed') {
+      return { id: 'completed', name: 'Completed', color: '#10b981' };
+    }
+    const found = lists.find(
+      (l) => l.id === activeListId || l.id === Number(activeListId)
+    );
+    return found || { id: activeListId, name: 'Movies', color: '#f5c518' };
+  }, [activeListId, lists]);
 
   // 3. Create List Handler
   const handleCreateList = async (listData) => {
     const newList = await createList(listData);
     setLists((prev) => [...prev, newList]);
     setActiveListId(newList.id);
+    setViewMode('list');
     showToast(`List "${newList.name}" created!`, 'success');
   };
 
-  // 4. Add Movie to List Handler
+  // 4. Reorder Custom Lists Handler (Drag & Drop)
+  const handleReorderCustomLists = async (newCustomLists) => {
+    const standardLists = lists.filter((l) => isCoreList(l.name));
+    const newAllLists = [...standardLists, ...newCustomLists];
+    setLists(newAllLists);
+
+    try {
+      const orderedIds = newAllLists.map((l) => l.id);
+      await reorderLists(orderedIds);
+    } catch (err) {
+      console.error('Failed to save list order:', err);
+      showToast('Failed to save list order', 'error');
+      fetchLists();
+    }
+  };
+
+  // Up / Down fallback helpers
+  const handleMoveListUp = async (listId) => {
+    const standardLists = lists.filter((l) => isCoreList(l.name));
+    const customLists = lists.filter((l) => !isCoreList(l.name));
+
+    const idx = customLists.findIndex((l) => l.id === listId);
+    if (idx <= 0) return;
+
+    const updatedCustom = [...customLists];
+    const [moved] = updatedCustom.splice(idx, 1);
+    updatedCustom.splice(idx - 1, 0, moved);
+
+    const newAllLists = [...standardLists, ...updatedCustom];
+    setLists(newAllLists);
+
+    try {
+      const orderedIds = newAllLists.map((l) => l.id);
+      await reorderLists(orderedIds);
+    } catch (err) {
+      console.error('Failed to save list order:', err);
+      showToast('Failed to save list order', 'error');
+      fetchLists();
+    }
+  };
+
+  const handleMoveListDown = async (listId) => {
+    const standardLists = lists.filter((l) => isCoreList(l.name));
+    const customLists = lists.filter((l) => !isCoreList(l.name));
+
+    const idx = customLists.findIndex((l) => l.id === listId);
+    if (idx === -1 || idx >= customLists.length - 1) return;
+
+    const updatedCustom = [...customLists];
+    const [moved] = updatedCustom.splice(idx, 1);
+    updatedCustom.splice(idx + 1, 0, moved);
+
+    const newAllLists = [...standardLists, ...updatedCustom];
+    setLists(newAllLists);
+
+    try {
+      const orderedIds = newAllLists.map((l) => l.id);
+      await reorderLists(orderedIds);
+    } catch (err) {
+      console.error('Failed to save list order:', err);
+      showToast('Failed to save list order', 'error');
+      fetchLists();
+    }
+  };
+
+  // 5. Delete List Handler
+  const handleDeleteList = async (listId) => {
+    try {
+      await deleteList(listId);
+      setLists((prev) => prev.filter((l) => l.id !== listId));
+      setAllMovies((prev) => prev.filter((item) => item.list !== listId));
+      if (activeListId === listId) {
+        setActiveListId('all');
+      }
+      showToast('List deleted', 'info');
+    } catch (err) {
+      console.error('Failed to delete list:', err);
+      showToast(err.message || 'Failed to delete list', 'error');
+    }
+  };
+
+  // 5b. Toggle Favourite Handler
+  const handleToggleFavourite = async (listId, newValue) => {
+    // Optimistic update
+    setLists((prev) =>
+      prev.map((l) => (l.id === listId ? { ...l, is_favourite: newValue } : l))
+    );
+    try {
+      await updateList(listId, { is_favourite: newValue });
+      showToast(newValue ? 'Added to Favourites ★' : 'Removed from Favourites', 'success');
+    } catch (err) {
+      // Revert on error
+      setLists((prev) =>
+        prev.map((l) => (l.id === listId ? { ...l, is_favourite: !newValue } : l))
+      );
+      showToast('Failed to update favourite', 'error');
+    }
+  };
+
+
+  // 6. Add Movie to List Handler
   const handleAddMovie = async (listId, movieData) => {
-    const newItem = await addMovieToList(listId, movieData);
+    let initialStatus = 'plan_to_watch';
+    if (activeListId === 'watching') initialStatus = 'watching';
+    if (activeListId === 'completed') initialStatus = 'completed';
+
+    const newItem = await addMovieToList(listId, movieData, initialStatus);
     showToast(`Added "${movieData.title}"!`, 'success');
 
     // Update list count in sidebar lists
     setLists((prev) =>
       prev.map((l) =>
-        l.id === Number(listId)
-          ? { ...l, items_count: (l.items_count || 0) + 1 }
-          : l
+        l.id === Number(listId) ? { ...l, items_count: (l.items_count || 0) + 1 } : l
       )
     );
 
-    // Refresh current list movies
-    await fetchMovies();
+    // Refresh movies
+    await fetchAllMovies();
 
-    // Automatically select the newly added movie to view its detail
+    // Open detail view for the newly added movie
     if (newItem) {
       setSelectedItem(newItem);
+      setViewMode('movie-detail');
     }
   };
 
-  // 5. Update List Item Handler (status, rating, notes)
+  // 7. Update List Item Handler (status, rating, notes)
   const handleUpdateItem = async (itemId, updates) => {
-    const updated = await updateListItem(itemId, updates);
-    setCurrentMovies((prev) =>
-      prev.map((item) => (item.id === itemId ? { ...item, ...updated } : item))
-    );
-    if (selectedItem && selectedItem.id === itemId) {
-      setSelectedItem((prev) => ({ ...prev, ...updated }));
+    try {
+      const updated = await updateListItem(itemId, updates);
+      setAllMovies((prev) =>
+        prev.map((item) => (item.id === itemId ? { ...item, ...updated } : item))
+      );
+      if (selectedItem && selectedItem.id === itemId) {
+        setSelectedItem((prev) => ({ ...prev, ...updated }));
+      }
+    } catch (err) {
+      console.error('Failed to update item:', err);
+      showToast('Failed to update movie', 'error');
     }
   };
 
-  // 6. Remove List Item Handler
+  // 8. Remove List Item Handler
   const handleRemoveItem = async (itemId) => {
-    await removeListItem(itemId);
-    setCurrentMovies((prev) => prev.filter((item) => item.id !== itemId));
-    if (selectedItem && selectedItem.id === itemId) {
-      setSelectedItem(null);
-    }
+    try {
+      await removeListItem(itemId);
+      setAllMovies((prev) => prev.filter((item) => item.id !== itemId));
+      if (selectedItem && selectedItem.id === itemId) {
+        setSelectedItem(null);
+        setViewMode('list');
+      }
 
-    // Decrement list count
-    setLists((prev) =>
-      prev.map((l) =>
-        l.id === activeListId
-          ? { ...l, items_count: Math.max(0, (l.items_count || 0) - 1) }
-          : l
-      )
-    );
-    showToast('Movie removed from list', 'info');
+      // Decrement list count
+      setLists((prev) =>
+        prev.map((l) =>
+          l.id === activeListId
+            ? { ...l, items_count: Math.max(0, (l.items_count || 0) - 1) }
+            : l
+        )
+      );
+      showToast('Movie removed from list', 'info');
+    } catch (err) {
+      console.error('Failed to remove item:', err);
+      showToast('Failed to remove movie', 'error');
+    }
   };
 
-  // 7. Seed Sample Data Handler
+  // 9. Seed Sample Data Handler
   const handleSeedData = async () => {
     try {
       setIsSeeding(true);
@@ -203,7 +476,7 @@ export default function App() {
         await fetchLists();
       }
       showToast('Sample movies & lists loaded successfully!', 'success');
-      await fetchMovies();
+      await fetchAllMovies();
     } catch (err) {
       console.error('Seed error:', err);
       showToast(err.message || 'Failed to seed sample data', 'error');
@@ -212,72 +485,159 @@ export default function App() {
     }
   };
 
-  // Keyboard shortcut: Ctrl+K / Cmd+K to open search, Esc to close
+  // Global Keyboard Shortcuts
   useEffect(() => {
+    const matchesShortcut = (e, shortcutStr) => {
+      if (!shortcutStr) return false;
+      const parts = shortcutStr.split('+');
+      const targetKey = parts[parts.length - 1].toLowerCase();
+      const requiresCtrl = parts.includes('Ctrl');
+      const requiresAlt = parts.includes('Alt');
+      const requiresShift = parts.includes('Shift');
+      const requiresCmd = parts.includes('Cmd') || parts.includes('Meta');
+
+      if (requiresCtrl && !e.ctrlKey) return false;
+      if (!requiresCtrl && e.ctrlKey && targetKey !== 'control') return false;
+
+      if (requiresAlt && !e.altKey) return false;
+      if (!requiresAlt && e.altKey && targetKey !== 'alt') return false;
+
+      if (requiresShift && !e.shiftKey) return false;
+      if (!requiresShift && e.shiftKey && targetKey !== 'shift') return false;
+
+      if (requiresCmd && !e.metaKey) return false;
+
+      const eventKey = e.key.toLowerCase();
+      if (targetKey === 'space' && eventKey === ' ') return true;
+      return eventKey === targetKey;
+    };
+
     const handleKeyDown = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      // Escape closes modals or exits detail view
+      if (e.key === 'Escape') {
+        if (isSettingsOpen) {
+          setIsSettingsOpen(false);
+          return;
+        }
+        if (isSearchOpen) {
+          setIsSearchOpen(false);
+          return;
+        }
+        if (isNewListOpen) {
+          setIsNewListOpen(false);
+          return;
+        }
+        if (viewMode === 'movie-detail') {
+          setViewMode('list');
+          setSelectedItem(null);
+          return;
+        }
+      }
+
+      // If user is typing in an input/textarea/select, don't trigger non-Escape shortcuts
+      const tag = (e.target?.tagName || '').toLowerCase();
+      const isInput = tag === 'input' || tag === 'textarea' || tag === 'select';
+      if (isInput) return;
+
+      // Toggle Sidebar (default Alt+B)
+      if (matchesShortcut(e, shortcuts.toggleSidebar)) {
+        e.preventDefault();
+        setIsSidebarOpen((prev) => !prev);
+        return;
+      }
+
+      // Open Settings (default Ctrl+,)
+      if (matchesShortcut(e, shortcuts.settings)) {
+        e.preventDefault();
+        setIsSettingsOpen(true);
+        return;
+      }
+
+      // Search Movies / TMDB (default Ctrl+K)
+      if (matchesShortcut(e, shortcuts.search)) {
         e.preventDefault();
         setIsSearchOpen(true);
+        return;
       }
-      if (e.key === 'Escape') {
-        if (isSearchOpen) setIsSearchOpen(false);
-        else if (isNewListOpen) setIsNewListOpen(false);
-        else if (selectedItem) setSelectedItem(null);
+
+      // Add Movie (default Alt+N)
+      if (matchesShortcut(e, shortcuts.addMovie)) {
+        e.preventDefault();
+        setIsSearchOpen(true);
+        return;
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSearchOpen, isNewListOpen, selectedItem]);
+  }, [shortcuts, isSettingsOpen, isSearchOpen, isNewListOpen, viewMode]);
 
-  // Current active list object
-  const currentListObj =
-    activeListId === 'all'
-      ? { id: 'all', name: 'All Movies', color: '#f5c518' }
-      : lists.find((l) => l.id === activeListId) || { id: activeListId, name: 'Movies', color: '#f5c518' };
-
-  // Total count across all lists
-  const totalAllCount = lists.reduce((acc, l) => acc + (l.items_count || 0), 0);
-
-  // Set of movie IDs in the active list
-  const existingMovieIds = new Set(
-    currentMovies.map((item) => item.movie?.tmdb_id || item.movie?.id).filter(Boolean)
-  );
+  // Set of movie IDs in the active list (for search modal to show 'Added')
+  const existingMovieIds = useMemo(() => {
+    return new Set(
+      displayedMovies.map((item) => item.movie?.tmdb_id || item.movie?.id).filter(Boolean)
+    );
+  }, [displayedMovies]);
 
   return (
-    <div className="flex h-screen w-screen bg-[#121212] text-white overflow-hidden select-none">
-      {/* 1. Left Column: Sidebar */}
+    <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--bg-void)' }}>
+      {/* Activity Rail */}
+      <ActivityRail
+        isSidebarOpen={isSidebarOpen}
+        onToggleSidebar={handleToggleSidebar}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        shortcuts={shortcuts}
+        totalMoviesCount={totalAllCount}
+      />
+
+      {/* Sidebar */}
       <Sidebar
+        isOpen={isSidebarOpen}
         lists={lists}
         activeListId={activeListId}
         onSelectList={(id) => {
           setActiveListId(id);
-          // Keep detail drawer open if desired or clear
+          setViewMode('list');
         }}
         onOpenNewList={() => setIsNewListOpen(true)}
-        onSeedData={handleSeedData}
-        isSeeding={isSeeding}
+        onReorderCustomLists={handleReorderCustomLists}
+        onDeleteList={handleDeleteList}
+        onToggleFavourite={handleToggleFavourite}
         totalAllMoviesCount={totalAllCount}
+        statusCounts={statusCounts}
       />
 
-      {/* 2. Middle Column: Movie List */}
-      <MovieList
-        currentList={currentListObj}
-        items={currentMovies}
-        selectedItemId={selectedItem?.id}
-        onSelectItem={(item) => setSelectedItem(item)}
-        onOpenSearch={() => setIsSearchOpen(true)}
-        isLoading={isLoadingMovies}
-      />
 
-      {/* 3. Right Column: Movie Detail Drawer */}
-      {selectedItem && (
-        <MovieDetail
+      {/* Main */}
+      {viewMode === 'movie-detail' && selectedItem ? (
+        <MovieDetailPage
           item={selectedItem}
-          onClose={() => setSelectedItem(null)}
+          onBack={() => { setViewMode('list'); setSelectedItem(null); }}
           onUpdateItem={handleUpdateItem}
           onRemoveItem={handleRemoveItem}
         />
+      ) : (
+        <MovieList
+          currentList={currentListObj}
+          items={displayedMovies}
+          selectedItemId={selectedItem?.id}
+          onSelectItem={(item) => { setSelectedItem(item); setViewMode('movie-detail'); }}
+          onOpenSearch={() => setIsSearchOpen(true)}
+          isLoading={isLoadingMovies}
+          cardSize={cardSize}
+          onCardSizeChange={setCardSize}
+          shortcuts={shortcuts}
+        />
       )}
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        shortcuts={shortcuts}
+        onSaveShortcuts={handleSaveShortcuts}
+        onResetShortcuts={handleResetShortcuts}
+      />
 
       {/* TMDB Search Modal */}
       <MovieSearchModal
@@ -296,14 +656,12 @@ export default function App() {
         onCreate={handleCreateList}
       />
 
-      {/* Toast Notification Banner */}
+      {/* Toast */}
       {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl bg-[#1f1f1f] border border-[#333333] shadow-2xl text-xs font-semibold text-white animate-fade-in">
-          {toastMessage.type === 'success' ? (
-            <CheckCircle2 size={16} className="text-[#f5c518]" />
-          ) : (
-            <AlertCircle size={16} className="text-red-400" />
-          )}
+        <div className="toast animate-fade-in">
+          {toastMessage.type === 'success'
+            ? <CheckCircle2 size={15} style={{ color: 'var(--gold)', flexShrink: 0 }} />
+            : <AlertCircle  size={15} style={{ color: 'var(--red)',  flexShrink: 0 }} />}
           <span>{toastMessage.message}</span>
         </div>
       )}
@@ -314,6 +672,7 @@ export default function App() {
           <AlertCircle size={15} className="text-amber-400 shrink-0" />
           <span>{backendError}</span>
           <button
+            type="button"
             onClick={fetchLists}
             className="flex items-center gap-1 ml-2 px-2.5 py-1 rounded-full bg-amber-800/80 hover:bg-amber-700 text-white font-bold text-[11px] transition-colors"
           >

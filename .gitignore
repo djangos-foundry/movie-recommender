@@ -15,6 +15,9 @@ __pycache__/
 # Database
 *.sqlite3
 db.sqlite3
+*.db
+*.db-journal
+cinema.db
 
 # Node
 node_modules/

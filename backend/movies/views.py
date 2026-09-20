@@ -1,4 +1,4 @@
-from django.db.models import Count
+from django.db.models import Count, Max
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -26,7 +26,27 @@ class MovieListIndexView(ListCreateAPIView):
     serializer_class = MovieListSerializer
 
     def get_queryset(self):
-        return MovieList.objects.annotate(items_count=Count('items')).order_by('created_at')
+        return MovieList.objects.annotate(items_count=Count('items')).order_by('order', 'created_at')
+
+    def perform_create(self, serializer):
+        max_order = MovieList.objects.aggregate(Max('order'))['order__max']
+        new_order = (max_order + 1) if max_order is not None else 0
+        serializer.save(order=new_order)
+
+
+class MovieListReorderView(APIView):
+    """
+    PATCH /api/lists/reorder/ - Reorder lists given ordered_ids array.
+    """
+    def patch(self, request):
+        ordered_ids = request.data.get('ordered_ids', [])
+        if not isinstance(ordered_ids, list):
+            return Response({"error": "ordered_ids list is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        for index, list_id in enumerate(ordered_ids):
+            MovieList.objects.filter(id=list_id).update(order=index)
+
+        return Response({"status": "success", "message": "Lists reordered successfully"})
 
 
 class MovieListDetailView(RetrieveUpdateDestroyAPIView):
@@ -60,12 +80,14 @@ class MovieListMoviesView(APIView):
         tmdb_id = data.get('tmdb_id')
         movie_payload = data.get('movie') or {}
 
-        if not tmdb_id:
-            tmdb_id = movie_payload.get('tmdb_id') or movie_payload.get('id')
+        if not tmdb_id and movie_payload.get('id'):
+            tmdb_id = movie_payload.get('id')
+        if not tmdb_id and movie_payload.get('tmdb_id'):
+            tmdb_id = movie_payload.get('tmdb_id')
 
         if not tmdb_id:
             return Response(
-                {"error": "Valid tmdb_id is required."},
+                {"error": "tmdb_id is required either directly or inside movie object."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -79,37 +101,66 @@ class MovieListMoviesView(APIView):
 
         # Retrieve or create Movie instance
         movie = Movie.objects.filter(tmdb_id=tmdb_id).first()
-        if not movie:
-            # If movie details are not in payload or payload is incomplete, fetch from TMDB service
-            if not movie_payload.get('title'):
-                fetched_details = tmdb_service.get_movie_details(tmdb_id)
-                if fetched_details:
-                    movie_payload = fetched_details
+        if not movie or not movie.overview or not movie.cast or not movie.director:
+            # Fetch comprehensive details from TMDB service
+            fetched_details = tmdb_service.get_movie_details(tmdb_id)
+            if fetched_details:
+                movie_payload = {**movie_payload, **fetched_details}
 
             title = movie_payload.get('title') or f"Movie #{tmdb_id}"
             original_title = movie_payload.get('original_title') or title
+            tagline = movie_payload.get('tagline', '')
             overview = movie_payload.get('overview', '')
             poster_path = format_poster_url(movie_payload.get('poster_path', ''))
             backdrop_path = format_backdrop_url(movie_payload.get('backdrop_path', ''))
             release_date = str(movie_payload.get('release_date', ''))
             vote_average = float(movie_payload.get('vote_average') or 0.0)
             vote_count = int(movie_payload.get('vote_count') or 0)
+            popularity = float(movie_payload.get('popularity') or 0.0)
             genres = normalize_genres(movie_payload.get('genres'))
             runtime = int(movie_payload.get('runtime') or 0)
+            imdb_id = str(movie_payload.get('imdb_id', ''))
+            budget = int(movie_payload.get('budget') or 0)
+            revenue = int(movie_payload.get('revenue') or 0)
+            homepage = str(movie_payload.get('homepage', ''))
+            spoken_languages = movie_payload.get('spoken_languages', [])
+            production_companies = movie_payload.get('production_companies', [])
+            cast = movie_payload.get('cast', [])
+            raw_data = movie_payload.get('raw_data', {})
+            director = str(movie_payload.get('director', ''))
+            crew = movie_payload.get('crew', [])
+            release_status = str(movie_payload.get('release_status', ''))
+            original_language = str(movie_payload.get('original_language', ''))
+            production_countries = movie_payload.get('production_countries', [])
 
-            movie, _ = Movie.objects.get_or_create(
+            movie, _ = Movie.objects.update_or_create(
                 tmdb_id=tmdb_id,
                 defaults={
                     'title': title,
                     'original_title': original_title,
+                    'tagline': tagline,
                     'overview': overview,
                     'poster_path': poster_path,
                     'backdrop_path': backdrop_path,
                     'release_date': release_date,
                     'vote_average': vote_average,
                     'vote_count': vote_count,
+                    'popularity': popularity,
                     'genres': genres,
                     'runtime': runtime,
+                    'imdb_id': imdb_id,
+                    'budget': budget,
+                    'revenue': revenue,
+                    'homepage': homepage,
+                    'spoken_languages': spoken_languages,
+                    'production_companies': production_companies,
+                    'cast': cast,
+                    'raw_data': raw_data,
+                    'director': director,
+                    'crew': crew,
+                    'release_status': release_status,
+                    'original_language': original_language,
+                    'production_countries': production_countries,
                 }
             )
 
@@ -211,24 +262,28 @@ class SeedDataView(APIView):
     def _seed(self):
         default_lists = [
             {
-                "name": "Adventure",
+                "name": "Plan to Watch",
                 "color": "#3b82f6",
-                "description": "Epic journeys, exploration, and quest-filled movies",
-            },
-            {
-                "name": "Sci-Fi",
-                "color": "#8b5cf6",
-                "description": "Mind-bending science fiction and futuristic stories",
-            },
-            {
-                "name": "Watchlist",
-                "color": "#f5c518",
                 "description": "Movies queued up to watch soon",
+                "order": 0,
             },
             {
-                "name": "Favorites",
-                "color": "#ef4444",
-                "description": "All-time favorite movies and masterpieces",
+                "name": "Watching",
+                "color": "#f59e0b",
+                "description": "Movies currently in progress",
+                "order": 1,
+            },
+            {
+                "name": "Completed",
+                "color": "#10b981",
+                "description": "Finished movies with your ratings and reviews",
+                "order": 2,
+            },
+            {
+                "name": "Adventure",
+                "color": "#f5c518",
+                "description": "Epic journeys, exploration, and quest-filled movies",
+                "order": 3,
             },
         ]
 
@@ -239,27 +294,43 @@ class SeedDataView(APIView):
                 defaults={
                     "color": lst_info["color"],
                     "description": lst_info["description"],
+                    "order": lst_info["order"],
                 },
             )
             created_lists.append(obj)
 
         # Seed Interstellar in "Adventure"
         adventure_list = MovieList.objects.get(name="Adventure")
-        interstellar_data = tmdb_service.get_movie_details(157336)
+        interstellar_data = tmdb_service.get_movie_details(157336) or {}
 
-        interstellar_movie, _ = Movie.objects.get_or_create(
+        interstellar_movie, _ = Movie.objects.update_or_create(
             tmdb_id=157336,
             defaults={
-                "title": interstellar_data["title"],
-                "original_title": interstellar_data["original_title"],
-                "overview": interstellar_data["overview"],
-                "poster_path": interstellar_data["poster_path"],
-                "backdrop_path": interstellar_data["backdrop_path"],
-                "release_date": interstellar_data["release_date"],
-                "vote_average": interstellar_data["vote_average"],
-                "vote_count": interstellar_data["vote_count"],
-                "genres": interstellar_data["genres"],
-                "runtime": interstellar_data["runtime"],
+                "title": interstellar_data.get("title", "Interstellar"),
+                "original_title": interstellar_data.get("original_title", "Interstellar"),
+                "tagline": interstellar_data.get("tagline", "Mankind was born on Earth. It was never meant to die here."),
+                "overview": interstellar_data.get("overview", ""),
+                "poster_path": interstellar_data.get("poster_path", ""),
+                "backdrop_path": interstellar_data.get("backdrop_path", ""),
+                "release_date": interstellar_data.get("release_date", "2014-11-05"),
+                "vote_average": interstellar_data.get("vote_average", 8.4),
+                "vote_count": interstellar_data.get("vote_count", 34500),
+                "popularity": interstellar_data.get("popularity", 145.2),
+                "genres": interstellar_data.get("genres", ["Adventure", "Drama", "Science Fiction"]),
+                "runtime": interstellar_data.get("runtime", 169),
+                "imdb_id": interstellar_data.get("imdb_id", "tt0816692"),
+                "budget": interstellar_data.get("budget", 165000000),
+                "revenue": interstellar_data.get("revenue", 701729206),
+                "homepage": interstellar_data.get("homepage", "http://www.interstellarmovie.net/"),
+                "spoken_languages": interstellar_data.get("spoken_languages", []),
+                "production_companies": interstellar_data.get("production_companies", []),
+                "cast": interstellar_data.get("cast", []),
+                "director": interstellar_data.get("director", "Christopher Nolan"),
+                "crew": interstellar_data.get("crew", []),
+                "release_status": interstellar_data.get("release_status", "Released"),
+                "original_language": interstellar_data.get("original_language", "en"),
+                "production_countries": interstellar_data.get("production_countries", []),
+                "raw_data": interstellar_data.get("raw_data", {}),
             },
         )
 
