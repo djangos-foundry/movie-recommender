@@ -54,10 +54,24 @@ export async function getLists() {
   return await fetchJson('/lists/');
 }
 
-export async function createList({ name, description = '', color = '#f5c518' }) {
+export async function createList({ name, description = '', color = '#f5c518', icon = 'Film' }) {
   return await fetchJson('/lists/', {
     method: 'POST',
-    body: JSON.stringify({ name, description, color }),
+    body: JSON.stringify({ name, description, color, icon }),
+  });
+}
+
+export async function updateList(listId, data) {
+  return await fetchJson(`/lists/${listId}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function reorderLists(orderedIds) {
+  return await fetchJson('/lists/reorder/', {
+    method: 'PATCH',
+    body: JSON.stringify({ ordered_ids: orderedIds }),
   });
 }
 

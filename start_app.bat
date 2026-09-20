@@ -1,58 +1,66 @@
 @echo off
-title CineTrack Movie App
-setlocal
+title CineTrack Movie App Launcher
+setlocal EnableDelayedExpansion
 
 set "ROOT_DIR=%~dp0"
 cd /d "%ROOT_DIR%"
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-"$rootDir = '%ROOT_DIR%'.TrimEnd('\'); " ^
-"Write-Host '======================================================================' -ForegroundColor Cyan; " ^
-"Write-Host '          Starting CineTrack Movie Recommender & Tracker             ' -ForegroundColor Yellow; " ^
-"Write-Host '======================================================================' -ForegroundColor Cyan; " ^
-"Write-Host ''; " ^
-"Write-Host '[1/4] Checking and freeing ports 8000 & 5173...' -ForegroundColor Gray; " ^
-"foreach ($port in @(8000, 5173)) { " ^
-"    $pids = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; " ^
-"    foreach ($p in $pids) { if ($p -and $p -ne $PID) { taskkill /F /T /PID $p 2>$null | Out-Null } } " ^
-"} " ^
-"$pyExe = \"$rootDir\.venv\py314\Scripts\python.exe\"; " ^
-"if (-not (Test-Path $pyExe)) { $pyExe = 'python' }; " ^
-"Write-Host '[2/4] Ensuring database migrations are applied...' -ForegroundColor Gray; " ^
-"& $pyExe \"$rootDir\backend\manage.py\" migrate --noinput | Out-Null; " ^
-"Write-Host '[3/4] Launching backend (port 8000) & frontend (port 5173)...' -ForegroundColor Gray; " ^
-"$backend = Start-Process -FilePath $pyExe -ArgumentList \"\"\"$rootDir\backend\manage.py\"\" runserver 0.0.0.0:8000\" -WorkingDirectory $rootDir -PassThru -WindowStyle Hidden; " ^
-"$frontend = Start-Process -FilePath 'npm.cmd' -ArgumentList 'run dev' -WorkingDirectory \"$rootDir\frontend\" -PassThru -WindowStyle Hidden; " ^
-"Write-Host '[4/4] Opening browser at http://localhost:5173 ...' -ForegroundColor Gray; " ^
-"Start-Sleep -Seconds 3; " ^
-"Start-Process 'http://localhost:5173'; " ^
-"Write-Host ''; " ^
-"Write-Host '======================================================================' -ForegroundColor Green; " ^
-"Write-Host '  CineTrack is now running!' -ForegroundColor Green; " ^
-"Write-Host '  - Web UI:      http://localhost:5173' -ForegroundColor White; " ^
-"Write-Host '  - Backend API: http://localhost:8000/api/' -ForegroundColor White; " ^
-"Write-Host '======================================================================' -ForegroundColor Green; " ^
-"Write-Host '  Servers are running in this window.' -ForegroundColor Cyan; " ^
-"Write-Host '  Press [Q] or close this window to STOP all servers and exit.' -ForegroundColor Yellow; " ^
-"Write-Host '======================================================================' -ForegroundColor Green; " ^
-"Write-Host ''; " ^
-"try { " ^
-"    while ($true) { " ^
-"        if ([Console]::KeyAvailable) { " ^
-"            $key = [Console]::ReadKey($true); " ^
-"            if ($key.Key -eq [ConsoleKey]::Q -or $key.Key -eq [ConsoleKey]::Escape) { break }; " ^
-"        } " ^
-"        Start-Sleep -Milliseconds 250; " ^
-"        if ($backend.HasExited -or $frontend.HasExited) { break }; " ^
-"    } " ^
-"} finally { " ^
-"    Write-Host 'Stopping CineTrack servers...' -ForegroundColor Yellow; " ^
-"    if ($backend -and -not $backend.HasExited) { taskkill /F /T /PID $backend.Id 2>$null | Out-Null }; " ^
-"    if ($frontend -and -not $frontend.HasExited) { taskkill /F /T /PID $frontend.Id 2>$null | Out-Null }; " ^
-"    foreach ($port in @(8000, 5173)) { " ^
-"        $pids = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; " ^
-"        foreach ($p in $pids) { if ($p -and $p -ne $PID) { taskkill /F /T /PID $p 2>$null | Out-Null } } " ^
-"    } " ^
-"    Write-Host 'All servers stopped. Goodbye!' -ForegroundColor Green; " ^
-"    Start-Sleep -Seconds 1; " ^
-"}"
+echo ======================================================================
+echo           Starting CineTrack Movie Recommender & Tracker
+echo ======================================================================
+echo.
+
+:: 1. Clear any leftover processes on ports 8000 & 5173
+echo [1/4] Ensuring ports 8000 and 5173 are free...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8000" ^| findstr "LISTENING"') do (
+    taskkill /F /T /PID %%a >nul 2>&1
+)
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":5173" ^| findstr "LISTENING"') do (
+    taskkill /F /T /PID %%a >nul 2>&1
+)
+
+:: 2. Find Python virtual environment
+if exist "%ROOT_DIR%\.venv\py314\Scripts\python.exe" (
+    set "PYTHON_EXE=%ROOT_DIR%\.venv\py314\Scripts\python.exe"
+) else (
+    set "PYTHON_EXE=python"
+)
+
+:: 3. Run database migrations
+echo [2/4] Verifying database schema...
+"%PYTHON_EXE%" backend\manage.py migrate --noinput
+
+:: 4. Start backend and frontend in background of this window
+echo [3/4] Launching Django API (port 8000) and React Vite (port 5173)...
+start /b "" "%PYTHON_EXE%" backend\manage.py runserver 0.0.0.0:8000
+start /b "" cmd /c "cd /d "%ROOT_DIR%\frontend" && npm.cmd run dev"
+
+:: 5. Open browser
+echo [4/4] Opening browser at http://localhost:5173 ...
+timeout /t 3 /nobreak >nul
+start http://localhost:5173
+
+echo.
+echo ======================================================================
+echo   CineTrack is now running!
+echo   - Web UI:      http://localhost:5173
+echo   - Backend API: http://localhost:8000/api/
+echo.
+echo   Both servers are running inside this single terminal.
+echo   When you are done, press any key or close this window to STOP all servers.
+echo ======================================================================
+echo.
+
+:: Keep window open until user presses a key or closes terminal
+pause >nul
+
+echo.
+echo Stopping CineTrack servers...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8000" ^| findstr "LISTENING"') do (
+    taskkill /F /T /PID %%a >nul 2>&1
+)
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":5173" ^| findstr "LISTENING"') do (
+    taskkill /F /T /PID %%a >nul 2>&1
+)
+echo All servers stopped cleanly.
+timeout /t 2 /nobreak >nul

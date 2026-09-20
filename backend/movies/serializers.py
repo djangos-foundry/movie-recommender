@@ -10,14 +10,29 @@ class MovieSerializer(serializers.ModelSerializer):
             'tmdb_id',
             'title',
             'original_title',
+            'tagline',
             'overview',
             'poster_path',
             'backdrop_path',
             'release_date',
             'vote_average',
             'vote_count',
+            'popularity',
             'genres',
             'runtime',
+            'imdb_id',
+            'budget',
+            'revenue',
+            'homepage',
+            'spoken_languages',
+            'production_companies',
+            'cast',
+            'director',
+            'crew',
+            'release_status',
+            'original_language',
+            'production_countries',
+            'raw_data',
             'created_at',
         ]
         read_only_fields = ['id', 'created_at']
@@ -53,11 +68,15 @@ class MovieListSerializer(serializers.ModelSerializer):
             'name',
             'description',
             'color',
+            'icon',
+            'is_favourite',
+            'order',
             'created_at',
             'items_count',
             'items',
         ]
         read_only_fields = ['id', 'created_at']
+
 
     def get_items_count(self, obj):
         if hasattr(obj, 'items_count'):

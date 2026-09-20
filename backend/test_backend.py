@@ -52,7 +52,8 @@ print(f"Movie title: {movie_detail_res.data['title']}, runtime: {movie_detail_re
 assert movie_detail_res.data['title'] == "Inception"
 
 print("\n--- 5. Testing adding Inception to Sci-Fi list ---")
-scifi_list = MovieList.objects.get(name="Sci-Fi")
+scifi_list, _ = MovieList.objects.get_or_create(name="Sci-Fi", defaults={"color": "#8b5cf6", "order": 4})
+scifi_list.items.all().delete()
 add_res = client.post(f'/api/lists/{scifi_list.id}/movies/', {
     'tmdb_id': 27205,
     'status': 'watching',
