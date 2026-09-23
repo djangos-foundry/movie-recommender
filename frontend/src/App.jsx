@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar';
 import MovieList from './components/MovieList';
 import MovieDetailPage from './components/MovieDetailPage';
 import MovieSearchModal from './components/MovieSearchModal';
+import RecommendationModal from './components/RecommendationModal';
 import NewListModal from './components/NewListModal';
 import ActivityRail from './components/ActivityRail';
 import SettingsModal, { DEFAULT_SHORTCUTS } from './components/SettingsModal';
@@ -51,6 +52,7 @@ export default function App() {
   // Modals
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isNewListOpen, setIsNewListOpen] = useState(false);
+  const [isRecommendOpen, setIsRecommendOpen] = useState(false);
 
   // Loading & Network state
   const [isLoadingLists, setIsLoadingLists] = useState(true);
@@ -527,6 +529,10 @@ export default function App() {
           setIsNewListOpen(false);
           return;
         }
+        if (isRecommendOpen) {
+          setIsRecommendOpen(false);
+          return;
+        }
         if (viewMode === 'movie-detail') {
           setViewMode('list');
           setSelectedItem(null);
@@ -570,7 +576,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcuts, isSettingsOpen, isSearchOpen, isNewListOpen, viewMode]);
+  }, [shortcuts, isSettingsOpen, isSearchOpen, isNewListOpen, isRecommendOpen, viewMode]);
 
   // Set of movie IDs in the active list (for search modal to show 'Added')
   const existingMovieIds = useMemo(() => {
@@ -578,6 +584,13 @@ export default function App() {
       displayedMovies.map((item) => item.movie?.tmdb_id || item.movie?.id).filter(Boolean)
     );
   }, [displayedMovies]);
+
+  // Every movie anywhere in the library - used to mark recommendations already saved
+  const allLibraryMovieIds = useMemo(() => {
+    return new Set(
+      allMovies.map((item) => item.movie?.tmdb_id || item.movie?.id).filter(Boolean)
+    );
+  }, [allMovies]);
 
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--bg-void)' }}>
@@ -623,6 +636,7 @@ export default function App() {
           selectedItemId={selectedItem?.id}
           onSelectItem={(item) => { setSelectedItem(item); setViewMode('movie-detail'); }}
           onOpenSearch={() => setIsSearchOpen(true)}
+          onOpenRecommendations={() => setIsRecommendOpen(true)}
           isLoading={isLoadingMovies}
           cardSize={cardSize}
           onCardSizeChange={setCardSize}
@@ -647,6 +661,16 @@ export default function App() {
         lists={lists}
         onAddMovie={handleAddMovie}
         existingMovieIds={existingMovieIds}
+      />
+
+      {/* Recommendation Modal */}
+      <RecommendationModal
+        isOpen={isRecommendOpen}
+        onClose={() => setIsRecommendOpen(false)}
+        lists={lists}
+        currentList={currentListObj}
+        onAddMovie={handleAddMovie}
+        existingMovieIds={allLibraryMovieIds}
       />
 
       {/* New List Modal */}

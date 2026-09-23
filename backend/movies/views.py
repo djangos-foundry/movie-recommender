@@ -16,6 +16,7 @@ from .serializers import (
     AddMovieToListSerializer,
 )
 from .services.tmdb import tmdb_service, format_poster_url, format_backdrop_url, normalize_genres
+from .services.recommender import get_recommendations
 
 
 class MovieListIndexView(ListCreateAPIView):
@@ -246,6 +247,33 @@ class TMDBMovieDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response(details)
+
+
+class RecommendationView(APIView):
+    """
+    GET /api/recommendations/?count=5&list_id=<optional>
+    Returns movies sampled without replacement from the genres the user collects.
+    """
+
+    def get(self, request):
+        count = request.query_params.get('count', 5)
+        try:
+            count = int(count)
+        except (ValueError, TypeError):
+            count = 5
+        count = max(1, min(count, 20))
+
+        list_id = request.query_params.get('list_id')
+        if list_id in ('', 'all', None):
+            list_id = None
+        else:
+            try:
+                list_id = int(list_id)
+            except (ValueError, TypeError):
+                list_id = None
+
+        data = get_recommendations(count=count, list_id=list_id)
+        return Response(data)
 
 
 class SeedDataView(APIView):

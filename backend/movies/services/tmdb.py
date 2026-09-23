@@ -28,6 +28,9 @@ GENRE_MAP = {
     37: "Western",
 }
 
+# Reverse lookup so a stored genre name can be turned back into a TMDB genre id
+GENRE_NAME_TO_ID = {name.lower(): gid for gid, name in GENRE_MAP.items()}
+
 # High-fidelity realistic mock database for popular movies
 MOCK_MOVIES = [
     {
@@ -618,6 +621,76 @@ class TMDBService:
             "production_companies": [],
             "raw_data": {},
         }
+
+    def discover_by_genres(self, genre_names, page=1, min_votes=100):
+        """
+        Fetch a pool of candidate movies that match any of the given genre names.
+
+        Used by the recommendation sampler to build a candidate pool. Falls back
+        to the local mock catalogue when no API key is configured or the call fails.
+        """
+        genre_ids = []
+        for name in genre_names or []:
+            gid = GENRE_NAME_TO_ID.get(str(name).strip().lower())
+            if gid and gid not in genre_ids:
+                genre_ids.append(gid)
+
+        if self.api_key and genre_ids:
+            try:
+                response = requests.get(
+                    f"{self.BASE_URL}/discover/movie",
+                    params={
+                        "api_key": self.api_key,
+                        # "|" is TMDB's OR operator - match any of these genres
+                        "with_genres": "|".join(str(g) for g in genre_ids),
+                        "page": page,
+                        "sort_by": "popularity.desc",
+                        "vote_count.gte": min_votes,
+                        "include_adult": False,
+                    },
+                    timeout=5,
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    results = []
+                    for item in data.get("results", []):
+                        results.append({
+                            "id": item.get("id"),
+                            "tmdb_id": item.get("id"),
+                            "title": item.get("title", ""),
+                            "original_title": item.get("original_title", ""),
+                            "overview": item.get("overview", ""),
+                            "poster_path": format_poster_url(item.get("poster_path")),
+                            "backdrop_path": format_backdrop_url(item.get("backdrop_path")),
+                            "release_date": item.get("release_date", ""),
+                            "vote_average": float(item.get("vote_average", 0.0)),
+                            "vote_count": int(item.get("vote_count", 0)),
+                            "popularity": float(item.get("popularity", 0.0)),
+                            "genres": normalize_genres(None, item.get("genre_ids", [])),
+                            "runtime": 0,
+                        })
+                    return results
+                logger.warning(
+                    "TMDB discover returned %s: %s. Falling back to mock data.",
+                    response.status_code,
+                    response.text,
+                )
+            except Exception as e:
+                logger.warning("TMDB discover request failed (%s). Falling back to mock data.", e)
+
+        return self._mock_discover(genre_names)
+
+    def _mock_discover(self, genre_names):
+        """Mock candidate pool: every mock movie sharing at least one requested genre."""
+        wanted = {str(n).strip().lower() for n in (genre_names or [])}
+        if not wanted:
+            return list(MOCK_MOVIES)
+
+        matches = [
+            m for m in MOCK_MOVIES
+            if wanted & {g.lower() for g in m.get("genres", [])}
+        ]
+        return matches if matches else list(MOCK_MOVIES)
 
     def _mock_search(self, query, page=1):
         if not query:

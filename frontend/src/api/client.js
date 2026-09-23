@@ -129,7 +129,14 @@ export async function getTMDBMovie(tmdbId) {
   return await fetchJson(`/tmdb/movie/${tmdbId}/`);
 }
 
-// 5. Seed sample data
+// 5. Recommendations (random sampling without replacement over your library's genres)
+export async function getRecommendations(count = 5, listId = null) {
+  const params = new URLSearchParams({ count: String(count) });
+  if (listId && listId !== 'all') params.set('list_id', String(listId));
+  return await fetchJson(`/recommendations/?${params.toString()}`);
+}
+
+// 6. Seed sample data
 export async function seedSampleData() {
   return await fetchJson('/seed/', {
     method: 'POST',
