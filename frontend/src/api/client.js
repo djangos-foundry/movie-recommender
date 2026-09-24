@@ -130,9 +130,28 @@ export async function getTMDBMovie(tmdbId) {
 }
 
 // 5. Recommendations (random sampling without replacement over your library's genres)
-export async function getRecommendations(count = 5, listId = null) {
+export async function getRecommendationFilters(listId = null) {
+  const params = new URLSearchParams();
+  if (listId && listId !== 'all') params.set('list_id', String(listId));
+  const qs = params.toString();
+  return await fetchJson(`/recommendations/filters/${qs ? `?${qs}` : ''}`);
+}
+
+export async function getRecommendations(count = 5, listId = null, filters = {}) {
   const params = new URLSearchParams({ count: String(count) });
   if (listId && listId !== 'all') params.set('list_id', String(listId));
+
+  // Multi-value filters repeat the key; scalars are sent only when set
+  for (const key of ['genres', 'directors', 'actors', 'languages']) {
+    for (const value of filters[key] || []) params.append(key, value);
+  }
+  for (const key of ['runtime_min', 'runtime_max', 'year_min', 'year_max', 'min_rating']) {
+    const value = filters[key];
+    if (value !== undefined && value !== null && value !== '') {
+      params.set(key, String(value));
+    }
+  }
+
   return await fetchJson(`/recommendations/?${params.toString()}`);
 }
 

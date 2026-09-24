@@ -16,7 +16,7 @@ from .serializers import (
     AddMovieToListSerializer,
 )
 from .services.tmdb import tmdb_service, format_poster_url, format_backdrop_url, normalize_genres
-from .services.recommender import get_recommendations
+from .services.recommender import get_recommendations, get_filter_options
 
 
 class MovieListIndexView(ListCreateAPIView):
@@ -249,30 +249,71 @@ class TMDBMovieDetailView(APIView):
         return Response(details)
 
 
-class RecommendationView(APIView):
+def _parse_list_id(raw):
+    if raw in ('', 'all', None):
+        return None
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_number(raw, cast=int):
+    if raw in ('', None):
+        return None
+    try:
+        return cast(raw)
+    except (ValueError, TypeError):
+        return None
+
+
+class RecommendationFiltersView(APIView):
     """
-    GET /api/recommendations/?count=5&list_id=<optional>
-    Returns movies sampled without replacement from the genres the user collects.
+    GET /api/recommendations/filters/?list_id=<optional>
+    Returns the filter options available, derived from the user's own library.
     """
 
     def get(self, request):
-        count = request.query_params.get('count', 5)
-        try:
-            count = int(count)
-        except (ValueError, TypeError):
-            count = 5
+        list_id = _parse_list_id(request.query_params.get('list_id'))
+        return Response(get_filter_options(list_id=list_id))
+
+
+class RecommendationView(APIView):
+    """
+    GET /api/recommendations/?count=5&list_id=&genres=&directors=&actors=
+        &languages=&runtime_min=&runtime_max=&year_min=&year_max=&min_rating=
+
+    Multi-value filters may be repeated (?genres=Horror&genres=Fantasy) or
+    given as a comma-separated string (?genres=Horror,Fantasy).
+    Returns movies sampled without replacement from the filtered library.
+    """
+
+    def _multi(self, request, key):
+        values = request.query_params.getlist(key)
+        out = []
+        for value in values:
+            out.extend(part.strip() for part in str(value).split(',') if part.strip())
+        return out
+
+    def get(self, request):
+        count = _parse_number(request.query_params.get('count')) or 5
         count = max(1, min(count, 20))
 
-        list_id = request.query_params.get('list_id')
-        if list_id in ('', 'all', None):
-            list_id = None
-        else:
-            try:
-                list_id = int(list_id)
-            except (ValueError, TypeError):
-                list_id = None
+        list_id = _parse_list_id(request.query_params.get('list_id'))
 
-        data = get_recommendations(count=count, list_id=list_id)
+        filters = {
+            'genres': self._multi(request, 'genres'),
+            'directors': self._multi(request, 'directors'),
+            'actors': self._multi(request, 'actors'),
+            'languages': self._multi(request, 'languages'),
+            'runtime_min': _parse_number(request.query_params.get('runtime_min')),
+            'runtime_max': _parse_number(request.query_params.get('runtime_max')),
+            'year_min': _parse_number(request.query_params.get('year_min')),
+            'year_max': _parse_number(request.query_params.get('year_max')),
+            'min_rating': _parse_number(request.query_params.get('min_rating'), cast=float),
+        }
+
+        data = get_recommendations(count=count, list_id=list_id, filters=filters)
         return Response(data)
 
 

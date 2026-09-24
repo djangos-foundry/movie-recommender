@@ -1,6 +1,29 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { X, Star, Plus, Check, Loader2, Film, Sparkles, Shuffle, Dices } from 'lucide-react';
-import { getRecommendations } from '../api/client';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  X, Star, Plus, Check, Loader2, Film, Sparkles, Shuffle, Dices,
+  SlidersHorizontal, RotateCcw, AlertTriangle,
+} from 'lucide-react';
+import { getRecommendations, getRecommendationFilters } from '../api/client';
+
+// TMDB returns ISO-639-1 codes; show something readable for the common ones
+const LANGUAGE_NAMES = {
+  en: 'English', ja: 'Japanese', hi: 'Hindi', ko: 'Korean', fr: 'French',
+  es: 'Spanish', de: 'German', it: 'Italian', zh: 'Chinese', cn: 'Chinese',
+  ru: 'Russian', pt: 'Portuguese', ta: 'Tamil', te: 'Telugu', ml: 'Malayalam',
+  sv: 'Swedish', da: 'Danish', no: 'Norwegian', fi: 'Finnish', nl: 'Dutch',
+  pl: 'Polish', tr: 'Turkish', th: 'Thai', ar: 'Arabic', fa: 'Persian',
+};
+const languageLabel = (code) => LANGUAGE_NAMES[code] || (code || '').toUpperCase();
+
+const EMPTY_FILTERS = {
+  genres: [],
+  directors: [],
+  actors: [],
+  languages: [],
+  runtime_min: '',
+  runtime_max: '',
+  min_rating: '',
+};
 
 export default function RecommendationModal({
   isOpen,
@@ -11,6 +34,9 @@ export default function RecommendationModal({
   existingMovieIds = new Set(),
 }) {
   const [data, setData] = useState(null);
+  const [options, setOptions] = useState(null);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [targetListId, setTargetListId] = useState('');
@@ -27,11 +53,11 @@ export default function RecommendationModal({
     }
   }, [currentList, lists]);
 
-  const draw = useCallback(async () => {
+  const draw = useCallback(async (activeFilters) => {
     try {
       setIsLoading(true);
       setError('');
-      const res = await getRecommendations(5);
+      const res = await getRecommendations(5, null, activeFilters);
       setData(res);
     } catch (err) {
       setError(err.message || 'Could not fetch recommendations.');
@@ -41,15 +67,47 @@ export default function RecommendationModal({
     }
   }, []);
 
-  // Draw a fresh set every time the modal opens
+  // On open: load the filter menu built from the library, then draw
   useEffect(() => {
-    if (isOpen) {
-      setAddedIds(new Set());
-      draw();
-    }
+    if (!isOpen) return;
+    setAddedIds(new Set());
+    setFilters(EMPTY_FILTERS);
+    getRecommendationFilters()
+      .then(setOptions)
+      .catch(() => setOptions(null));
+    draw(EMPTY_FILTERS);
   }, [isOpen, draw]);
 
+  const activeFilterCount = useMemo(() => {
+    let n = 0;
+    for (const key of ['genres', 'directors', 'actors', 'languages']) {
+      n += (filters[key] || []).length;
+    }
+    if (filters.runtime_min !== '' || filters.runtime_max !== '') n += 1;
+    if (filters.min_rating !== '') n += 1;
+    return n;
+  }, [filters]);
+
   if (!isOpen) return null;
+
+  const toggleMulti = (key, value) => {
+    setFilters((prev) => {
+      const current = prev[key] || [];
+      return {
+        ...prev,
+        [key]: current.includes(value)
+          ? current.filter((v) => v !== value)
+          : [...current, value],
+      };
+    });
+  };
+
+  const setScalar = (key, value) => setFilters((prev) => ({ ...prev, [key]: value }));
+
+  const resetFilters = () => {
+    setFilters(EMPTY_FILTERS);
+    draw(EMPTY_FILTERS);
+  };
 
   const handleAdd = async (movie) => {
     const listId = targetListId || lists[0]?.id;
@@ -71,6 +129,10 @@ export default function RecommendationModal({
 
   const results = data?.results || [];
   const seedGenres = data?.seed_genres || [];
+  const runtimeBounds = options?.runtime || { min: 0, max: 0 };
+
+  // "Drawn from 20 of your 100 movies" - the headline number for the filter feature
+  const narrowed = data && data.library_total > 0 && data.library_size !== data.library_total;
 
   return (
     <div className="modal-overlay">
@@ -82,9 +144,18 @@ export default function RecommendationModal({
             <div>
               <h3 className="rec__title">Recommended for You</h3>
               <p className="rec__subtitle">
-                {data && data.library_size > 0
-                  ? `Sampled from ${data.pool_size} candidates, based on your ${data.library_size} saved ${data.library_size === 1 ? 'movie' : 'movies'}`
-                  : 'Random picks drawn from the genres you collect'}
+                {data && data.library_total > 0 ? (
+                  <>
+                    Drawn from{' '}
+                    <strong className={narrowed ? 'rec__narrowed' : ''}>
+                      {data.library_size}
+                    </strong>
+                    {' '}of your {data.library_total} saved movies
+                    {data.pool_size > 0 && <> · {data.pool_size} candidates</>}
+                  </>
+                ) : (
+                  'Random picks drawn from the genres you collect'
+                )}
               </p>
             </div>
           </div>
@@ -112,17 +183,179 @@ export default function RecommendationModal({
           </div>
         </div>
 
-        {/* ── Seed genres ── */}
-        {seedGenres.length > 0 && !isLoading && (
-          <div className="rec__seeds">
-            <span className="rec__seeds-label">Drawn from</span>
-            {seedGenres.map((g) => (
-              <span key={g} className="rec__seed-chip">{g}</span>
-            ))}
+        {/* ── Filter bar ── */}
+        <div className="rec__filterbar">
+          <button
+            type="button"
+            className={`rec__filter-toggle ${showFilters ? 'is-open' : ''}`}
+            onClick={() => setShowFilters((v) => !v)}
+          >
+            <SlidersHorizontal size={13} />
+            <span>Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="rec__filter-count">{activeFilterCount}</span>
+            )}
+          </button>
+
+          {seedGenres.length > 0 && !isLoading && (
+            <div className="rec__seeds-inline">
+              <span className="rec__seeds-label">Drawn from</span>
+              {seedGenres.map((g) => (
+                <span key={g} className="rec__seed-chip">{g}</span>
+              ))}
+            </div>
+          )}
+
+          {activeFilterCount > 0 && (
+            <button type="button" onClick={resetFilters} className="rec__reset-btn">
+              <RotateCcw size={12} />
+              <span>Reset</span>
+            </button>
+          )}
+        </div>
+
+        {/* ── Filter panel ── */}
+        {showFilters && (
+          <div className="rec__filters custom-scrollbar">
+            {!options && <p className="rec__filter-empty">Loading filters…</p>}
+
+            {options && (
+              <>
+                {options.genres?.length > 0 && (
+                  <FilterGroup label="Genre">
+                    {options.genres.map((g) => (
+                      <Chip
+                        key={g.value}
+                        active={filters.genres.includes(g.value)}
+                        onClick={() => toggleMulti('genres', g.value)}
+                      >
+                        {g.value} <span className="rec__chip-count">{g.count}</span>
+                      </Chip>
+                    ))}
+                  </FilterGroup>
+                )}
+
+                {options.languages?.length > 1 && (
+                  <FilterGroup label="Language">
+                    {options.languages.map((l) => (
+                      <Chip
+                        key={l.value}
+                        active={filters.languages.includes(l.value)}
+                        onClick={() => toggleMulti('languages', l.value)}
+                      >
+                        {languageLabel(l.value)} <span className="rec__chip-count">{l.count}</span>
+                      </Chip>
+                    ))}
+                  </FilterGroup>
+                )}
+
+                {options.directors?.length > 0 && (
+                  <FilterGroup label="Director">
+                    <div className="rec__scroll-chips custom-scrollbar">
+                      {options.directors.map((d) => (
+                        <Chip
+                          key={d.value}
+                          active={filters.directors.includes(d.value)}
+                          onClick={() => toggleMulti('directors', d.value)}
+                        >
+                          {d.value} <span className="rec__chip-count">{d.count}</span>
+                        </Chip>
+                      ))}
+                    </div>
+                  </FilterGroup>
+                )}
+
+                {options.actors?.length > 0 && (
+                  <FilterGroup label="Actor">
+                    <div className="rec__scroll-chips custom-scrollbar">
+                      {options.actors.map((a) => (
+                        <Chip
+                          key={a.value}
+                          active={filters.actors.includes(a.value)}
+                          onClick={() => toggleMulti('actors', a.value)}
+                        >
+                          {a.value} <span className="rec__chip-count">{a.count}</span>
+                        </Chip>
+                      ))}
+                    </div>
+                  </FilterGroup>
+                )}
+
+                {/* Runtime slider */}
+                {runtimeBounds.max > 0 && (
+                  <FilterGroup label="Runtime">
+                    <div className="rec__slider-row">
+                      <span className="rec__slider-value">
+                        {filters.runtime_min || runtimeBounds.min} min
+                      </span>
+                      <input
+                        type="range"
+                        className="rec__slider"
+                        min={runtimeBounds.min}
+                        max={runtimeBounds.max}
+                        value={filters.runtime_min || runtimeBounds.min}
+                        onChange={(e) => setScalar('runtime_min', Number(e.target.value))}
+                      />
+                      <span className="rec__slider-sep">to</span>
+                      <input
+                        type="range"
+                        className="rec__slider"
+                        min={runtimeBounds.min}
+                        max={runtimeBounds.max}
+                        value={filters.runtime_max || runtimeBounds.max}
+                        onChange={(e) => setScalar('runtime_max', Number(e.target.value))}
+                      />
+                      <span className="rec__slider-value">
+                        {filters.runtime_max || runtimeBounds.max} min
+                      </span>
+                    </div>
+                  </FilterGroup>
+                )}
+
+                {/* Minimum rating */}
+                <FilterGroup label="Minimum rating">
+                  <div className="rec__slider-row">
+                    <input
+                      type="range"
+                      className="rec__slider"
+                      min={0}
+                      max={9}
+                      step={0.5}
+                      value={filters.min_rating === '' ? 0 : filters.min_rating}
+                      onChange={(e) => setScalar('min_rating', Number(e.target.value) || '')}
+                    />
+                    <span className="rec__slider-value">
+                      {filters.min_rating === '' || filters.min_rating === 0
+                        ? 'Any'
+                        : `${filters.min_rating}+`}
+                    </span>
+                  </div>
+                </FilterGroup>
+
+                <button
+                  type="button"
+                  className="rec__apply-btn"
+                  onClick={() => draw(filters)}
+                  disabled={isLoading}
+                >
+                  {isLoading
+                    ? <Loader2 size={14} className="amm__spinner" />
+                    : <Sparkles size={14} strokeWidth={2.5} />}
+                  <span>Apply &amp; Recommend</span>
+                </button>
+              </>
+            )}
           </div>
         )}
 
-        {/* ── Error ── */}
+        {/* ── Degraded / error notices ── */}
+        {data?.degraded && results.length > 0 && (
+          <div className="rec__notice">
+            <AlertTriangle size={13} />
+            <span>{data.message}</span>
+          </div>
+        )}
+
         {error && (
           <div className="amm__error">
             <span>{error}</span>
@@ -130,7 +363,7 @@ export default function RecommendationModal({
           </div>
         )}
 
-        {/* ── Body ── */}
+        {/* ── Results ── */}
         <div className="rec__body custom-scrollbar">
           {isLoading && (
             <div className="amm__state">
@@ -183,13 +416,8 @@ export default function RecommendationModal({
                     )}
                   </div>
 
-                  {movie.reason && (
-                    <span className="rec__reason">{movie.reason}</span>
-                  )}
-
-                  {movie.overview && (
-                    <p className="amm__result-overview">{movie.overview}</p>
-                  )}
+                  {movie.reason && <span className="rec__reason">{movie.reason}</span>}
+                  {movie.overview && <p className="amm__result-overview">{movie.overview}</p>}
                 </div>
 
                 <div className="amm__result-action">
@@ -220,7 +448,7 @@ export default function RecommendationModal({
           </span>
           <button
             type="button"
-            onClick={draw}
+            onClick={() => draw(filters)}
             disabled={isLoading}
             className="rec__shuffle-btn"
           >
@@ -232,5 +460,26 @@ export default function RecommendationModal({
         </div>
       </div>
     </div>
+  );
+}
+
+function FilterGroup({ label, children }) {
+  return (
+    <div className="rec__filter-group">
+      <span className="rec__filter-label">{label}</span>
+      <div className="rec__chips">{children}</div>
+    </div>
+  );
+}
+
+function Chip({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rec__chip ${active ? 'is-active' : ''}`}
+    >
+      {children}
+    </button>
   );
 }

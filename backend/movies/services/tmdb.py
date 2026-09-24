@@ -622,34 +622,81 @@ class TMDBService:
             "raw_data": {},
         }
 
-    def discover_by_genres(self, genre_names, page=1, min_votes=100):
+    def discover_movies(self, genre_names=None, page=1, min_votes=100, criteria=None,
+                        status_out=None, attempts=2):
         """
-        Fetch a pool of candidate movies that match any of the given genre names.
+        Fetch a pool of candidate movies matching a set of discovery criteria.
 
-        Used by the recommendation sampler to build a candidate pool. Falls back
-        to the local mock catalogue when no API key is configured or the call fails.
+        `criteria` is an optional dict of extra constraints, any of which may be
+        omitted: language, runtime_min, runtime_max, year_min, year_max,
+        min_rating, cast_ids, crew_ids.
+
+        Falls back to the local mock catalogue when no API key is configured or
+        the call fails, applying the same constraints locally so behaviour stays
+        consistent either way. When it does fall back, `status_out['degraded']`
+        is set to True so callers can tell "TMDB is unreachable" apart from
+        "there genuinely are no matches" - the two need very different messages.
         """
+        criteria = criteria or {}
+        if status_out is None:
+            status_out = {}
+
         genre_ids = []
         for name in genre_names or []:
             gid = GENRE_NAME_TO_ID.get(str(name).strip().lower())
             if gid and gid not in genre_ids:
                 genre_ids.append(gid)
 
-        if self.api_key and genre_ids:
-            try:
-                response = requests.get(
-                    f"{self.BASE_URL}/discover/movie",
-                    params={
-                        "api_key": self.api_key,
-                        # "|" is TMDB's OR operator - match any of these genres
-                        "with_genres": "|".join(str(g) for g in genre_ids),
-                        "page": page,
-                        "sort_by": "popularity.desc",
-                        "vote_count.gte": min_votes,
-                        "include_adult": False,
-                    },
-                    timeout=5,
-                )
+        if self.api_key:
+            params = {
+                "api_key": self.api_key,
+                "page": page,
+                "sort_by": "popularity.desc",
+                "vote_count.gte": min_votes,
+                "include_adult": False,
+            }
+            if genre_ids:
+                # "|" is TMDB's OR operator - match any of these genres
+                params["with_genres"] = "|".join(str(g) for g in genre_ids)
+
+            language = criteria.get("language")
+            if language:
+                params["with_original_language"] = language
+
+            if criteria.get("runtime_min"):
+                params["with_runtime.gte"] = int(criteria["runtime_min"])
+            if criteria.get("runtime_max"):
+                params["with_runtime.lte"] = int(criteria["runtime_max"])
+
+            if criteria.get("year_min"):
+                params["primary_release_date.gte"] = f"{int(criteria['year_min'])}-01-01"
+            if criteria.get("year_max"):
+                params["primary_release_date.lte"] = f"{int(criteria['year_max'])}-12-31"
+
+            if criteria.get("min_rating"):
+                params["vote_average.gte"] = float(criteria["min_rating"])
+
+            cast_ids = [c for c in (criteria.get("cast_ids") or []) if c]
+            if cast_ids:
+                params["with_cast"] = "|".join(str(c) for c in cast_ids)
+
+            crew_ids = [c for c in (criteria.get("crew_ids") or []) if c]
+            if crew_ids:
+                params["with_crew"] = "|".join(str(c) for c in crew_ids)
+
+            # Transient connection resets are common; one cheap retry recovers most
+            last_error = None
+            for attempt in range(max(1, attempts)):
+                try:
+                    response = requests.get(
+                        f"{self.BASE_URL}/discover/movie",
+                        params=params,
+                        timeout=6,
+                    )
+                except Exception as e:
+                    last_error = e
+                    continue
+
                 if response.status_code == 200:
                     data = response.json()
                     results = []
@@ -667,30 +714,57 @@ class TMDBService:
                             "vote_count": int(item.get("vote_count", 0)),
                             "popularity": float(item.get("popularity", 0.0)),
                             "genres": normalize_genres(None, item.get("genre_ids", [])),
+                            "original_language": item.get("original_language", ""),
                             "runtime": 0,
                         })
+                    status_out["degraded"] = status_out.get("degraded", False)
                     return results
-                logger.warning(
-                    "TMDB discover returned %s: %s. Falling back to mock data.",
-                    response.status_code,
-                    response.text,
-                )
-            except Exception as e:
-                logger.warning("TMDB discover request failed (%s). Falling back to mock data.", e)
 
-        return self._mock_discover(genre_names)
+                last_error = f"HTTP {response.status_code}: {response.text[:200]}"
 
-    def _mock_discover(self, genre_names):
-        """Mock candidate pool: every mock movie sharing at least one requested genre."""
+            logger.warning("TMDB discover failed (%s). Falling back to mock data.", last_error)
+
+        status_out["degraded"] = True
+        return self._mock_discover(genre_names, criteria)
+
+    # Backwards-compatible alias
+    def discover_by_genres(self, genre_names, page=1, min_votes=100):
+        return self.discover_movies(genre_names=genre_names, page=page, min_votes=min_votes)
+
+    def _mock_discover(self, genre_names, criteria=None):
+        """Mock candidate pool, with the same constraints applied locally."""
+        criteria = criteria or {}
         wanted = {str(n).strip().lower() for n in (genre_names or [])}
-        if not wanted:
-            return list(MOCK_MOVIES)
 
-        matches = [
-            m for m in MOCK_MOVIES
-            if wanted & {g.lower() for g in m.get("genres", [])}
-        ]
-        return matches if matches else list(MOCK_MOVIES)
+        pool = list(MOCK_MOVIES)
+        if wanted:
+            matched = [
+                m for m in pool
+                if wanted & {g.lower() for g in m.get("genres", [])}
+            ]
+            pool = matched if matched else list(MOCK_MOVIES)
+
+        def keeps(m):
+            lang = criteria.get("language")
+            if lang and m.get("original_language") and m["original_language"] != lang:
+                return False
+            rt = m.get("runtime") or 0
+            if criteria.get("runtime_min") and rt and rt < int(criteria["runtime_min"]):
+                return False
+            if criteria.get("runtime_max") and rt and rt > int(criteria["runtime_max"]):
+                return False
+            year = (m.get("release_date") or "")[:4]
+            if year.isdigit():
+                if criteria.get("year_min") and int(year) < int(criteria["year_min"]):
+                    return False
+                if criteria.get("year_max") and int(year) > int(criteria["year_max"]):
+                    return False
+            if criteria.get("min_rating") and float(m.get("vote_average") or 0) < float(criteria["min_rating"]):
+                return False
+            return True
+
+        filtered = [m for m in pool if keeps(m)]
+        return filtered
 
     def _mock_search(self, query, page=1):
         if not query:

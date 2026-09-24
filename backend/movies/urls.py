@@ -9,6 +9,7 @@ from .views import (
     TMDBMovieDetailView,
     SeedDataView,
     RecommendationView,
+    RecommendationFiltersView,
 )
 
 urlpatterns = [
@@ -27,6 +28,7 @@ urlpatterns = [
 
     # Recommendations
     path('recommendations/', RecommendationView.as_view(), name='recommendations'),
+    path('recommendations/filters/', RecommendationFiltersView.as_view(), name='recommendation-filters'),
 
     # Seed Database
     path('seed/', SeedDataView.as_view(), name='seed-data'),
