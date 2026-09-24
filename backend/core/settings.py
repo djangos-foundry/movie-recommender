@@ -114,3 +114,7 @@ REST_FRAMEWORK = {
 
 # TMDB Configuration
 TMDB_API_KEY = os.getenv('TMDB_API_KEY', '')
+
+# Claude / Anthropic API key for the natural-language chat box.
+# Optional: without it the chat falls back to a local keyword parser.
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')

@@ -10,6 +10,7 @@ from .views import (
     SeedDataView,
     RecommendationView,
     RecommendationFiltersView,
+    ChatRecommendView,
 )
 
 urlpatterns = [
@@ -29,6 +30,9 @@ urlpatterns = [
     # Recommendations
     path('recommendations/', RecommendationView.as_view(), name='recommendations'),
     path('recommendations/filters/', RecommendationFiltersView.as_view(), name='recommendation-filters'),
+
+    # Natural-language chat
+    path('chat/', ChatRecommendView.as_view(), name='chat-recommend'),
 
     # Seed Database
     path('seed/', SeedDataView.as_view(), name='seed-data'),

@@ -155,7 +155,20 @@ export async function getRecommendations(count = 5, listId = null, filters = {})
   return await fetchJson(`/recommendations/?${params.toString()}`);
 }
 
-// 6. Seed sample data
+// 6. Natural-language chat recommendations
+export async function sendChatMessage(message, history = [], listId = null, count = 5) {
+  return await fetchJson('/chat/', {
+    method: 'POST',
+    body: JSON.stringify({
+      message,
+      history,
+      count,
+      list_id: listId && listId !== 'all' ? listId : null,
+    }),
+  });
+}
+
+// 7. Seed sample data
 export async function seedSampleData() {
   return await fetchJson('/seed/', {
     method: 'POST',

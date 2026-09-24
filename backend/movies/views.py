@@ -17,6 +17,7 @@ from .serializers import (
 )
 from .services.tmdb import tmdb_service, format_poster_url, format_backdrop_url, normalize_genres
 from .services.recommender import get_recommendations, get_filter_options
+from .services.chat import interpret
 
 
 class MovieListIndexView(ListCreateAPIView):
@@ -315,6 +316,36 @@ class RecommendationView(APIView):
 
         data = get_recommendations(count=count, list_id=list_id, filters=filters)
         return Response(data)
+
+
+class ChatRecommendView(APIView):
+    """
+    POST /api/chat/  {"message": "...", "history": [...], "list_id": null}
+
+    Interprets the message into the same filters the filter panel produces,
+    then runs the existing sampler with them.
+    """
+
+    def post(self, request):
+        message = (request.data.get('message') or '').strip()
+        if not message:
+            return Response(
+                {"error": "message is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        history = request.data.get('history') or []
+        if not isinstance(history, list):
+            history = []
+
+        list_id = _parse_list_id(request.data.get('list_id'))
+        count = _parse_number(request.data.get('count')) or 5
+        count = max(1, min(count, 20))
+
+        filters, reply, source = interpret(message, list_id=list_id, history=history)
+        data = get_recommendations(count=count, list_id=list_id, filters=filters)
+
+        return Response({**data, "reply": reply, "filters": filters, "source": source})
 
 
 class SeedDataView(APIView):

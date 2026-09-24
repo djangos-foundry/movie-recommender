@@ -4,6 +4,7 @@ import MovieList from './components/MovieList';
 import MovieDetailPage from './components/MovieDetailPage';
 import MovieSearchModal from './components/MovieSearchModal';
 import RecommendationModal from './components/RecommendationModal';
+import ChatModal from './components/ChatModal';
 import NewListModal from './components/NewListModal';
 import ActivityRail from './components/ActivityRail';
 import SettingsModal, { DEFAULT_SHORTCUTS } from './components/SettingsModal';
@@ -53,6 +54,7 @@ export default function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isNewListOpen, setIsNewListOpen] = useState(false);
   const [isRecommendOpen, setIsRecommendOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   // Loading & Network state
   const [isLoadingLists, setIsLoadingLists] = useState(true);
@@ -533,6 +535,10 @@ export default function App() {
           setIsRecommendOpen(false);
           return;
         }
+        if (isChatOpen) {
+          setIsChatOpen(false);
+          return;
+        }
         if (viewMode === 'movie-detail') {
           setViewMode('list');
           setSelectedItem(null);
@@ -576,7 +582,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcuts, isSettingsOpen, isSearchOpen, isNewListOpen, isRecommendOpen, viewMode]);
+  }, [shortcuts, isSettingsOpen, isSearchOpen, isNewListOpen, isRecommendOpen, isChatOpen, viewMode]);
 
   // Set of movie IDs in the active list (for search modal to show 'Added')
   const existingMovieIds = useMemo(() => {
@@ -637,6 +643,7 @@ export default function App() {
           onSelectItem={(item) => { setSelectedItem(item); setViewMode('movie-detail'); }}
           onOpenSearch={() => setIsSearchOpen(true)}
           onOpenRecommendations={() => setIsRecommendOpen(true)}
+          onOpenChat={() => setIsChatOpen(true)}
           isLoading={isLoadingMovies}
           cardSize={cardSize}
           onCardSizeChange={setCardSize}
@@ -667,6 +674,16 @@ export default function App() {
       <RecommendationModal
         isOpen={isRecommendOpen}
         onClose={() => setIsRecommendOpen(false)}
+        lists={lists}
+        currentList={currentListObj}
+        onAddMovie={handleAddMovie}
+        existingMovieIds={allLibraryMovieIds}
+      />
+
+      {/* Chat Modal */}
+      <ChatModal
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
         lists={lists}
         currentList={currentListObj}
         onAddMovie={handleAddMovie}
