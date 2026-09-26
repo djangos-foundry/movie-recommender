@@ -8,6 +8,9 @@ from .views import (
     TMDBSearchView,
     TMDBMovieDetailView,
     SeedDataView,
+    RecommendationView,
+    RecommendationFiltersView,
+    ChatRecommendView,
 )
 
 urlpatterns = [
@@ -23,6 +26,13 @@ urlpatterns = [
     # TMDB Integration
     path('tmdb/search/', TMDBSearchView.as_view(), name='tmdb-search'),
     path('tmdb/movie/<int:tmdb_id>/', TMDBMovieDetailView.as_view(), name='tmdb-movie-detail'),
+
+    # Recommendations
+    path('recommendations/', RecommendationView.as_view(), name='recommendations'),
+    path('recommendations/filters/', RecommendationFiltersView.as_view(), name='recommendation-filters'),
+
+    # Natural-language chat
+    path('chat/', ChatRecommendView.as_view(), name='chat-recommend'),
 
     # Seed Database
     path('seed/', SeedDataView.as_view(), name='seed-data'),

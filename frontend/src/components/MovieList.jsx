@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Search, Plus, Star, Film, ChevronDown, FolderOpen, X } from 'lucide-react';
+import { Search, Plus, Star, Film, ChevronDown, FolderOpen, X, Sparkles, MessageSquare } from 'lucide-react';
 
 const STATUS_BADGES = {
   plan_to_watch: { label: 'Plan to Watch', cls: 'badge--blue' },
@@ -28,6 +28,8 @@ export default function MovieList({
   selectedItemId,
   onSelectItem,
   onOpenSearch,
+  onOpenRecommendations,
+  onOpenChat,
   isLoading = false,
   cardSize = 'medium',
   onCardSizeChange,
@@ -141,6 +143,28 @@ export default function MovieList({
               </button>
             ))}
           </div>
+
+          {/* Ask (natural language) */}
+          <button
+            type="button"
+            onClick={onOpenChat}
+            className="topbar__chat-btn"
+            title="Describe what you want to watch"
+          >
+            <MessageSquare size={15} strokeWidth={2.5} />
+            <span>Ask</span>
+          </button>
+
+          {/* Recommend */}
+          <button
+            type="button"
+            onClick={onOpenRecommendations}
+            className="topbar__rec-btn"
+            title="Get 5 random recommendations based on your lists"
+          >
+            <Sparkles size={15} strokeWidth={2.5} />
+            <span>Recommend</span>
+          </button>
 
           {/* Add movie */}
           <button
