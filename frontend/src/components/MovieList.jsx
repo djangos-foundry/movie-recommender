@@ -34,6 +34,7 @@ export default function MovieList({
   cardSize = 'medium',
   onCardSizeChange,
   shortcuts = {},
+  onRemoveItem,
 }) {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('added');
@@ -239,6 +240,22 @@ export default function MovieList({
                         <Film size={32} />
                       </div>
                     )}
+                    {/* Top-right delete button (cross in circle, scales with size, hidden until hovered at that location) */}
+                    <button
+                      type="button"
+                      className="movie-card__delete-btn"
+                      title={`Remove "${movie.title}"`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Are you sure you want to remove "${movie.title}" from this list?`)) {
+                          onRemoveItem?.(item.id);
+                        }
+                      }}
+                      aria-label={`Remove ${movie.title}`}
+                    >
+                      <X className="movie-card__delete-icon" />
+                    </button>
+
                     <div className="movie-card__gradient" />
                     {/* Status badge */}
                     <span className={`movie-card__status-badge badge ${badge.cls}`}>{badge.label}</span>

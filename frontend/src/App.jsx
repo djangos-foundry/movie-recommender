@@ -648,6 +648,7 @@ export default function App() {
           cardSize={cardSize}
           onCardSizeChange={setCardSize}
           shortcuts={shortcuts}
+          onRemoveItem={handleRemoveItem}
         />
       )}
 
