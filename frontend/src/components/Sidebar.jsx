@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Film, Bookmark, CheckCircle2, Clock, Plus, Trash2, MoreVertical, Star } from 'lucide-react';
 import { getListIcon } from './NewListModal';
+import BrandHeader from './BrandHeader';
 
 const CORE_STATUSES = [
   { id: 'plan_to_watch', name: 'Plan to Watch', icon: Bookmark, color: '#60a5fa' },
@@ -167,15 +168,7 @@ export default function Sidebar({
     <>
       <aside className={`sidebar ${isOpen ? 'sidebar--open' : 'sidebar--closed'}`}>
         {/* Branding */}
-        <div className="sidebar__brand">
-          <div className="sidebar__logo">
-            <Film size={15} strokeWidth={2.5} />
-          </div>
-          <div className="sidebar__brand-text">
-            <span className="sidebar__brand-name">CINETRACK</span>
-            <span className="sidebar__brand-sub">Movie Hub &amp; Tracker</span>
-          </div>
-        </div>
+        <BrandHeader />
 
         <nav className="sidebar__nav">
           {/* ── LIBRARY ── */}
