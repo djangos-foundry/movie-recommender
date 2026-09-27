@@ -1,12 +1,19 @@
 import React, { useState } from 'react';
-import { User, Settings, LogOut } from 'lucide-react';
+import { User, Settings, LogOut, Film, Compass, CalendarDays, Trash2 } from 'lucide-react';
 
-
+const SECTIONS = [
+  { id: 'library', label: 'Library', icon: Film, shortcutKey: 'goLibrary', fallback: 'Ctrl+Shift+1' },
+  { id: 'discover', label: 'Discover', icon: Compass, shortcutKey: 'goDiscover', fallback: 'Ctrl+Shift+2' },
+  { id: 'schedule', label: 'Calendar', icon: CalendarDays, shortcutKey: 'goSchedule', fallback: 'Ctrl+Shift+3' },
+];
 
 export default function ActivityRail({
+  activeSection = 'library',
+  onSelectSection,
   isSidebarOpen = true,
   onToggleSidebar,
   onOpenSettings,
+  onOpenTrash,
   shortcuts = {},
   totalMoviesCount = 0,
 }) {
@@ -14,7 +21,7 @@ export default function ActivityRail({
 
   return (
     <aside className="activity-rail">
-      {/* Top: User Avatar */}
+      {/* Top: User Avatar + sections */}
       <div className="activity-rail__top">
         <div className="activity-rail__avatar-wrap">
           <button
@@ -54,16 +61,52 @@ export default function ActivityRail({
                   className="activity-rail__popover-btn"
                 >
                   <Settings size={13} />
-                  <span>Settings &amp; Keybindings</span>
+                  <span>Settings</span>
                 </button>
               </div>
             </>
           )}
         </div>
+
+        <div className="activity-rail__divider" aria-hidden="true" />
+
+        <nav className="activity-rail__sections" aria-label="Sections">
+          {SECTIONS.map(({ id, label, icon: Icon, shortcutKey, fallback }) => {
+            const isActive = activeSection === id;
+            return (
+              <div
+                key={id}
+                className="activity-rail__icon-wrap"
+                data-tooltip={`${label} (${shortcuts[shortcutKey] || fallback})`}
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelectSection?.(id)}
+                  className={`activity-rail__section ${isActive ? 'is-active' : ''}`}
+                  aria-label={label}
+                  aria-current={isActive ? 'page' : undefined}
+                >
+                  <Icon size={18} />
+                </button>
+              </div>
+            );
+          })}
+        </nav>
       </div>
 
-      {/* Bottom: Settings + Toggle */}
+      {/* Bottom: Trash + Settings + Toggle */}
       <div className="activity-rail__bottom">
+        <div className="activity-rail__icon-wrap" data-tooltip={`Trash (${shortcuts.toggleTrash || 'Ctrl+Shift+Backspace'})`}>
+          <button
+            type="button"
+            onClick={onOpenTrash}
+            className="activity-rail__icon-btn"
+            aria-label="Trash"
+          >
+            <Trash2 size={18} />
+          </button>
+        </div>
+
         <div className="activity-rail__icon-wrap" data-tooltip={`Settings (${shortcuts.settings || 'Ctrl+,'})`}>
           <button
             type="button"
@@ -95,7 +138,6 @@ export default function ActivityRail({
               }}
             />
           </button>
-
         </div>
       </div>
     </aside>

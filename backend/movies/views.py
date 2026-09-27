@@ -1,4 +1,5 @@
 from django.db.models import Count, Max
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -8,12 +9,15 @@ from rest_framework.generics import (
     get_object_or_404,
 )
 
-from .models import MovieList, Movie, MovieListItem
+from .models import MovieList, Movie, MovieListItem, ScheduledWatch, TRASH_RETENTION_DAYS
 from .serializers import (
     MovieListSerializer,
     MovieListItemSerializer,
     MovieSerializer,
     AddMovieToListSerializer,
+    ScheduledWatchSerializer,
+    TrashedListSerializer,
+    TrashedItemSerializer,
 )
 from .services.tmdb import tmdb_service, format_poster_url, format_backdrop_url, normalize_genres
 from .services.recommender import get_recommendations, get_filter_options
@@ -55,10 +59,14 @@ class MovieListDetailView(RetrieveUpdateDestroyAPIView):
     """
     GET /api/lists/<int:pk>/ - Retrieve list details with items.
     PUT/PATCH /api/lists/<int:pk>/ - Update list.
-    DELETE /api/lists/<int:pk>/ - Delete list.
+    DELETE /api/lists/<int:pk>/ - Soft-delete list (moves it to Trash for 30 days).
     """
     serializer_class = MovieListSerializer
     queryset = MovieList.objects.annotate(items_count=Count('items'))
+
+    def perform_destroy(self, instance):
+        instance.deleted_at = timezone.now()
+        instance.save(update_fields=['deleted_at'])
 
 
 class MovieListMoviesView(APIView):
@@ -69,7 +77,7 @@ class MovieListMoviesView(APIView):
 
     def get(self, request, pk):
         movie_list = get_object_or_404(MovieList, pk=pk)
-        items = movie_list.items.select_related('movie').all()
+        items = movie_list.items.select_related('movie').filter(deleted_at__isnull=True)
         serializer = MovieListItemSerializer(items, many=True)
         return Response(serializer.data)
 
@@ -166,9 +174,12 @@ class MovieListMoviesView(APIView):
                 }
             )
 
-        # Check for duplicate in the same list
-        existing_item = MovieListItem.objects.filter(list=movie_list, movie=movie).first()
-        if existing_item:
+        # A previous removal soft-deletes the row rather than dropping it (so
+        # it can sit in Trash), and (list, movie) stays unique at the DB level
+        # — so re-adding a movie that's currently in Trash for this list must
+        # revive that same row instead of hitting the uniqueness constraint.
+        existing_item = MovieListItem.all_objects.filter(list=movie_list, movie=movie).first()
+        if existing_item and existing_item.deleted_at is None:
             return Response(
                 {
                     "error": "Movie is already in this list.",
@@ -177,13 +188,21 @@ class MovieListMoviesView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        item = MovieListItem.objects.create(
-            list=movie_list,
-            movie=movie,
-            status=data.get('status', 'plan_to_watch'),
-            user_rating=data.get('user_rating'),
-            user_notes=data.get('user_notes', ''),
-        )
+        if existing_item:
+            existing_item.deleted_at = None
+            existing_item.status = data.get('status', 'plan_to_watch')
+            existing_item.user_rating = data.get('user_rating')
+            existing_item.user_notes = data.get('user_notes', '')
+            existing_item.save()
+            item = existing_item
+        else:
+            item = MovieListItem.objects.create(
+                list=movie_list,
+                movie=movie,
+                status=data.get('status', 'plan_to_watch'),
+                user_rating=data.get('user_rating'),
+                user_notes=data.get('user_notes', ''),
+            )
 
         return Response(
             MovieListItemSerializer(item).data,
@@ -195,10 +214,14 @@ class MovieListItemDetailView(RetrieveUpdateDestroyAPIView):
     """
     GET /api/list-items/<int:pk>/ - Retrieve item details.
     PATCH/PUT /api/list-items/<int:pk>/ - Update status, user_rating, user_notes.
-    DELETE /api/list-items/<int:pk>/ - Remove movie item from list.
+    DELETE /api/list-items/<int:pk>/ - Soft-delete item (moves it to Trash for 30 days).
     """
     queryset = MovieListItem.objects.select_related('list', 'movie').all()
     serializer_class = MovieListItemSerializer
+
+    def perform_destroy(self, instance):
+        instance.deleted_at = timezone.now()
+        instance.save(update_fields=['deleted_at'])
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', True)
@@ -216,6 +239,35 @@ class MovieListItemDetailView(RetrieveUpdateDestroyAPIView):
         instance.save()
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
+
+
+class ScheduledWatchListCreateView(ListCreateAPIView):
+    """
+    GET /api/schedule/?start=<iso>&end=<iso> - Watch sessions in range (both
+        optional; FullCalendar sends both when paging months/weeks).
+    POST /api/schedule/ - Schedule a library movie to watch between two times.
+    """
+    serializer_class = ScheduledWatchSerializer
+
+    def get_queryset(self):
+        qs = ScheduledWatch.objects.select_related('movie').all()
+        start = self.request.query_params.get('start')
+        end = self.request.query_params.get('end')
+        if start:
+            qs = qs.filter(end_time__gte=start)
+        if end:
+            qs = qs.filter(start_time__lte=end)
+        return qs
+
+
+class ScheduledWatchDetailView(RetrieveUpdateDestroyAPIView):
+    """
+    GET /api/schedule/<int:pk>/ - Retrieve one scheduled watch.
+    PUT/PATCH /api/schedule/<int:pk>/ - Reschedule, edit notes, or mark watched.
+    DELETE /api/schedule/<int:pk>/ - Remove it from the calendar.
+    """
+    queryset = ScheduledWatch.objects.select_related('movie').all()
+    serializer_class = ScheduledWatchSerializer
 
 
 class TMDBSearchView(APIView):
@@ -460,3 +512,86 @@ class SeedDataView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+def _purge_expired_trash():
+    """Hard-deletes anything past the retention window. Called lazily on every
+    Trash read instead of needing a cron/Celery job for a feature this small."""
+    cutoff = timezone.now() - timezone.timedelta(days=TRASH_RETENTION_DAYS)
+    MovieList.all_objects.filter(deleted_at__isnull=False, deleted_at__lt=cutoff).delete()
+    MovieListItem.all_objects.filter(deleted_at__isnull=False, deleted_at__lt=cutoff).delete()
+
+
+class TrashView(APIView):
+    """
+    GET /api/trash/ - Everything currently in Trash (lists and individually
+        removed movies), newest-removed first. Sweeps anything past the
+        30-day retention window before returning.
+
+    A movie removed from a list that is *itself* now in Trash isn't listed
+    separately here — restoring the list brings it back as one unit
+    (list-level restore only; see the plan doc).
+    """
+
+    def get(self, request):
+        _purge_expired_trash()
+
+        trashed_lists = MovieList.all_objects.filter(deleted_at__isnull=False)
+        trashed_list_ids = set(trashed_lists.values_list('id', flat=True))
+
+        trashed_items = (
+            MovieListItem.all_objects
+            .select_related('list', 'movie')
+            .filter(deleted_at__isnull=False)
+            .exclude(list_id__in=trashed_list_ids)
+        )
+
+        entries = [
+            *TrashedListSerializer(trashed_lists, many=True).data,
+            *TrashedItemSerializer(trashed_items, many=True).data,
+        ]
+        entries.sort(key=lambda e: e['deleted_at'], reverse=True)
+
+        return Response({"count": len(entries), "results": entries})
+
+
+class TrashRestoreView(APIView):
+    """
+    POST /api/trash/<str:kind>/<int:pk>/restore/ - Un-delete a trashed list
+        or list-item. kind is "list" or "item".
+    """
+
+    def post(self, request, kind, pk):
+        if kind == 'list':
+            obj = get_object_or_404(MovieList.all_objects, pk=pk, deleted_at__isnull=False)
+            obj.deleted_at = None
+            obj.save(update_fields=['deleted_at'])
+            return Response(TrashedListSerializer(obj).data)
+
+        if kind == 'item':
+            obj = get_object_or_404(MovieListItem.all_objects, pk=pk, deleted_at__isnull=False)
+            obj.deleted_at = None
+            obj.save(update_fields=['deleted_at'])
+            return Response(TrashedItemSerializer(obj).data)
+
+        return Response({"error": "kind must be 'list' or 'item'."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class TrashPermanentDeleteView(APIView):
+    """
+    DELETE /api/trash/<str:kind>/<int:pk>/ - Permanently delete a trashed
+        list or list-item right now, instead of waiting out the 30 days.
+    """
+
+    def delete(self, request, kind, pk):
+        if kind == 'list':
+            obj = get_object_or_404(MovieList.all_objects, pk=pk, deleted_at__isnull=False)
+            obj.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        if kind == 'item':
+            obj = get_object_or_404(MovieListItem.all_objects, pk=pk, deleted_at__isnull=False)
+            obj.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        return Response({"error": "kind must be 'list' or 'item'."}, status=status.HTTP_400_BAD_REQUEST)

@@ -174,3 +174,61 @@ export async function seedSampleData() {
     method: 'POST',
   });
 }
+
+// 8. Schedule (calendar of planned watch sessions)
+export async function getScheduledWatches({ start, end } = {}) {
+  const params = new URLSearchParams();
+  if (start) params.set('start', start);
+  if (end) params.set('end', end);
+  const qs = params.toString();
+  return await fetchJson(`/schedule/${qs ? `?${qs}` : ''}`);
+}
+
+export async function createScheduledWatch({ movieId, startTime, endTime, notes = '' }) {
+  return await fetchJson('/schedule/', {
+    method: 'POST',
+    body: JSON.stringify({
+      movie_id: movieId,
+      start_time: startTime,
+      end_time: endTime,
+      notes,
+    }),
+  });
+}
+
+export async function updateScheduledWatch(id, { movieId, startTime, endTime, notes, isWatched } = {}) {
+  const payload = {};
+  if (movieId !== undefined) payload.movie_id = movieId;
+  if (startTime !== undefined) payload.start_time = startTime;
+  if (endTime !== undefined) payload.end_time = endTime;
+  if (notes !== undefined) payload.notes = notes;
+  if (isWatched !== undefined) payload.is_watched = isWatched;
+
+  return await fetchJson(`/schedule/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteScheduledWatch(id) {
+  return await fetchJson(`/schedule/${id}/`, {
+    method: 'DELETE',
+  });
+}
+
+// 9. Trash (soft-deleted lists and list-items, 30-day retention)
+export async function getTrash() {
+  return await fetchJson('/trash/');
+}
+
+export async function restoreTrashEntry(kind, id) {
+  return await fetchJson(`/trash/${kind}/${id}/restore/`, {
+    method: 'POST',
+  });
+}
+
+export async function permanentlyDeleteTrashEntry(kind, id) {
+  return await fetchJson(`/trash/${kind}/${id}/`, {
+    method: 'DELETE',
+  });
+}

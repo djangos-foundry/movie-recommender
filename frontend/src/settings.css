@@ -1,0 +1,345 @@
+/* ==========================================================================
+   SETTINGS
+   Full-window dialog: section list on the left, rows of label + control on
+   the right. Uses the same warm tokens as Discover.
+   ========================================================================== */
+
+.st-overlay {
+  --st-bg: var(--bg-base);
+  --st-nav: var(--bg-deep);
+  --st-surface: var(--bg-surface);
+  --st-line: var(--border-subtle);
+  --st-text: var(--text-primary);
+  --st-mute: var(--text-secondary);
+  --st-accent: var(--accent);
+  --st-on-accent: var(--on-accent);
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: rgba(0, 0, 0, 0.6);
+  animation: fadeIn 0.14s ease forwards;
+}
+
+.st-overlay *,
+.st-overlay *::before,
+.st-overlay *::after {
+  box-sizing: border-box;
+}
+
+.st {
+  width: min(1040px, 100%);
+  height: min(720px, 100%);
+  display: flex;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--st-line);
+  background: var(--st-bg);
+  color: var(--st-text);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+}
+
+.st__nav {
+  width: 264px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 14px;
+  background: var(--st-nav);
+  border-right: 1px solid var(--st-line);
+}
+
+.st__nav-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+}
+
+.st__title,
+.st__page-title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--st-text);
+}
+
+.st__title {
+  font-size: 20px;
+}
+
+.st__close {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--st-mute);
+}
+
+.st__close:hover {
+  background: var(--st-surface);
+  color: var(--st-text);
+}
+
+.st__nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.st-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--st-mute);
+  text-align: left;
+}
+
+.st-nav:hover,
+.st-nav.is-on {
+  background: var(--st-surface);
+  color: var(--st-text);
+}
+
+.st__content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #4a4846 transparent;
+}
+
+.st__content-inner {
+  max-width: 700px;
+  padding: 44px 56px 48px;
+}
+
+.st__page-title {
+  font-size: 24px;
+}
+
+.st__page-sub {
+  margin: 8px 0 22px;
+  font-size: 14px;
+  color: var(--st-mute);
+}
+
+.st-rows {
+  border-top: 1px solid var(--st-line);
+}
+
+.st-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--st-line);
+}
+
+.st-row__title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--st-text);
+}
+
+.st-row__desc {
+  max-width: 400px;
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--st-mute);
+}
+
+.st-row__control {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.st-segs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--st-line);
+  background: var(--st-bg);
+}
+
+.st-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--st-mute);
+}
+
+.st-seg:hover:not(:disabled) {
+  color: var(--st-text);
+}
+
+.st-seg.is-on {
+  background: var(--st-surface);
+  color: var(--st-text);
+  box-shadow: 0 0 0 1px var(--st-line);
+}
+
+.st-seg:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.st-seg small {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.st-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--st-line);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--st-text);
+}
+
+.st-btn:hover {
+  background: var(--st-surface);
+}
+
+.st-key {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--st-line);
+  background: var(--st-bg);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--st-text);
+}
+
+.st-key--recording {
+  border-color: var(--st-accent);
+  color: var(--st-accent);
+}
+
+.st-warn {
+  padding: 12px 0 0;
+  font-size: 13px;
+  color: #fca5a5;
+}
+
+.st-actions {
+  padding-top: 20px;
+}
+
+.st-swatches {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.st-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--swatch);
+}
+
+.st-swatch.is-on {
+  box-shadow: 0 0 0 3px var(--st-bg), 0 0 0 5px var(--swatch);
+}
+
+.st-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 42px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--st-surface);
+  transition: background 0.15s;
+}
+
+.st-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 0.15s;
+}
+
+.st-switch[aria-checked='true'] {
+  background: var(--st-accent);
+}
+
+.st-switch[aria-checked='true']::after {
+  transform: translateX(18px);
+}
+
+.st-step {
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 4px;
+  border-radius: 12px;
+  border: 1px solid var(--st-line);
+  background: var(--st-bg);
+}
+
+.st-step__btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--st-mute);
+}
+
+.st-step__btn:hover:not(:disabled) {
+  background: var(--st-surface);
+  color: var(--st-text);
+}
+
+.st-step__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.st-step__num {
+  min-width: 40px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.st-overlay button:focus-visible {
+  box-shadow: 0 0 0 2px var(--st-accent);
+}

@@ -11,6 +11,11 @@ from .views import (
     RecommendationView,
     RecommendationFiltersView,
     ChatRecommendView,
+    ScheduledWatchListCreateView,
+    ScheduledWatchDetailView,
+    TrashView,
+    TrashRestoreView,
+    TrashPermanentDeleteView,
 )
 
 urlpatterns = [
@@ -34,6 +39,15 @@ urlpatterns = [
     # Natural-language chat
     path('chat/', ChatRecommendView.as_view(), name='chat-recommend'),
 
+    # Schedule (calendar of planned watch sessions)
+    path('schedule/', ScheduledWatchListCreateView.as_view(), name='schedule-index'),
+    path('schedule/<int:pk>/', ScheduledWatchDetailView.as_view(), name='schedule-detail'),
+
     # Seed Database
     path('seed/', SeedDataView.as_view(), name='seed-data'),
+
+    # Trash (soft-deleted lists and list-items, 30-day retention)
+    path('trash/', TrashView.as_view(), name='trash-index'),
+    path('trash/<str:kind>/<int:pk>/restore/', TrashRestoreView.as_view(), name='trash-restore'),
+    path('trash/<str:kind>/<int:pk>/', TrashPermanentDeleteView.as_view(), name='trash-permanent-delete'),
 ]

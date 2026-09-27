@@ -12,6 +12,8 @@ import {
   User,
   ChevronRight,
   Folder,
+  Plus,
+  Loader2,
 } from 'lucide-react';
 
 const STATUS_OPTIONS = [
@@ -38,24 +40,51 @@ const STATUS_OPTIONS = [
 ];
 
 
-export default function MovieDetailPage({ item, onBack, onUpdateItem, onRemoveItem }) {
-  if (!item) return null;
-
-  const movie = item.movie || {};
-  const [status, setStatus] = useState(item.status || 'plan_to_watch');
-  const [userRating, setUserRating] = useState(item.user_rating || null);
+export default function MovieDetailPage({
+  item,
+  onBack,
+  onUpdateItem,
+  onRemoveItem,
+  // Preview mode: a movie that is not in the library yet (opened from a web recommendation).
+  // It is read-only, and the only action is adding it to a list. Nothing is saved by opening it.
+  isPreview = false,
+  lists = [],
+  onAdd,
+}) {
+  const movie = item?.movie || {};
+  const [status, setStatus] = useState(item?.status || 'plan_to_watch');
+  const [userRating, setUserRating] = useState(item?.user_rating || null);
   const [hoverRating, setHoverRating] = useState(null);
-  const [userNotes, setUserNotes] = useState(item.user_notes || '');
+  const [userNotes, setUserNotes] = useState(item?.user_notes || '');
+  const [targetListId, setTargetListId] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
 
   useEffect(() => {
-    setStatus(item.status || 'plan_to_watch');
-    setUserRating(item.user_rating || null);
-    setUserNotes(item.user_notes || '');
+    setStatus(item?.status || 'plan_to_watch');
+    setUserRating(item?.user_rating || null);
+    setUserNotes(item?.user_notes || '');
     setIsSaved(false);
   }, [item]);
+
+  // Preview mode defaults the destination list to "Plan to Watch"
+  useEffect(() => {
+    if (!isPreview || lists.length === 0) return;
+    const plan = lists.find((l) => (l.name || '').toLowerCase().trim() === 'plan to watch');
+    setTargetListId(String((plan || lists[0]).id));
+  }, [isPreview, lists]);
+
+  const handleAddToList = async () => {
+    if (!targetListId || isAdding) return;
+    try {
+      setIsAdding(true);
+      await onAdd?.(targetListId);
+    } finally {
+      setIsAdding(false);
+    }
+  };
 
   const handleStatusChange = async (newStatus) => {
     setStatus(newStatus);
@@ -96,6 +125,8 @@ export default function MovieDetailPage({ item, onBack, onUpdateItem, onRemoveIt
       }
     }
   };
+
+  if (!item) return null;
 
   // Derived data
   const releaseYear = movie.release_date ? movie.release_date.substring(0, 4) : '';
@@ -141,26 +172,50 @@ export default function MovieDetailPage({ item, onBack, onUpdateItem, onRemoveIt
       <header className="mdp-topbar">
         <button type="button" onClick={onBack} className="mdp-back-btn">
           <ArrowLeft size={15} />
-          <span>Back to Movies</span>
+          <span>{isPreview ? 'Back' : 'Back to Movies'}</span>
         </button>
 
-        <div className="mdp-topbar-right">
-          <div className="mdp-list-pill" title={`Saved in list: ${item.list_name || 'My List'}`}>
-            <Folder size={12} className="mdp-list-pill__icon" />
-            <span className="mdp-list-pill__label">List</span>
-            <span className="mdp-list-pill__divider">·</span>
-            <span className="mdp-list-pill__name">{item.list_name || 'My List'}</span>
+        {isPreview ? (
+          <div className="mdp-topbar-right">
+            <select
+              className="mdp-add-select"
+              value={targetListId}
+              onChange={(e) => setTargetListId(e.target.value)}
+              aria-label="List to add to"
+            >
+              {lists.map((l) => (
+                <option key={l.id} value={l.id}>{l.name}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleAddToList}
+              disabled={isAdding || !targetListId}
+              className="mdp-add-btn"
+            >
+              {isAdding ? <Loader2 size={13} className="dz-spinner" /> : <Plus size={13} />}
+              <span>Add to list</span>
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleRemove}
-            disabled={isRemoving}
-            className="mdp-remove-btn"
-          >
-            <Trash2 size={13} />
-            <span>{isRemoving ? 'Removing…' : 'Remove'}</span>
-          </button>
-        </div>
+        ) : (
+          <div className="mdp-topbar-right">
+            <div className="mdp-list-pill" title={`Saved in list: ${item.list_name || 'My List'}`}>
+              <Folder size={12} className="mdp-list-pill__icon" />
+              <span className="mdp-list-pill__label">List</span>
+              <span className="mdp-list-pill__divider">·</span>
+              <span className="mdp-list-pill__name">{item.list_name || 'My List'}</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleRemove}
+              disabled={isRemoving}
+              className="mdp-remove-btn"
+            >
+              <Trash2 size={13} />
+              <span>{isRemoving ? 'Removing…' : 'Remove'}</span>
+            </button>
+          </div>
+        )}
       </header>
 
       {/* ── Hero: Backdrop ── */}
@@ -254,6 +309,7 @@ export default function MovieDetailPage({ item, onBack, onUpdateItem, onRemoveIt
           )}
 
           {/* Watch Status */}
+          {!isPreview && (
           <div className="mdp-status-block">
             <span className="mdp-status-block__label">Watch Status</span>
             <div className="mdp-status-pills">
@@ -272,6 +328,7 @@ export default function MovieDetailPage({ item, onBack, onUpdateItem, onRemoveIt
               })}
             </div>
           </div>
+          )}
         </div>
       </div>
 
@@ -380,6 +437,7 @@ export default function MovieDetailPage({ item, onBack, onUpdateItem, onRemoveIt
         )}
 
         {/* Personal Review & Rating */}
+        {!isPreview && (
         <section className="mdp-section">
           <h2 className="mdp-section-title">Personal Review</h2>
           <div className="mdp-review-card">
@@ -450,6 +508,7 @@ export default function MovieDetailPage({ item, onBack, onUpdateItem, onRemoveIt
             </div>
           </div>
         </section>
+        )}
 
       </main>
     </div>

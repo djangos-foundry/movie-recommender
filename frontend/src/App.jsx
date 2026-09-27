@@ -3,11 +3,14 @@ import Sidebar from './components/Sidebar';
 import MovieList from './components/MovieList';
 import MovieDetailPage from './components/MovieDetailPage';
 import MovieSearchModal from './components/MovieSearchModal';
-import RecommendationModal from './components/RecommendationModal';
-import ChatModal from './components/ChatModal';
+import Discover from './components/Discover';
+import Schedule from './components/Schedule';
 import NewListModal from './components/NewListModal';
+import TrashModal from './components/TrashModal';
 import ActivityRail from './components/ActivityRail';
-import SettingsModal, { DEFAULT_SHORTCUTS } from './components/SettingsModal';
+import SettingsModal from './components/SettingsModal';
+import { DEFAULT_SHORTCUTS, matchesShortcut } from './lib/shortcuts';
+import { loadPrefs, savePrefs, applyAccent } from './lib/prefs';
 import {
   getLists,
   createList,
@@ -19,6 +22,7 @@ import {
   updateListItem,
   removeListItem,
   seedSampleData,
+  getTMDBMovie,
 } from './api/client';
 
 import { AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
@@ -43,18 +47,27 @@ export default function App() {
   const [activeListId, setActiveListId] = useState('all'); // 'all', 'plan_to_watch', 'watching', 'completed', or list.id
   const [allMovies, setAllMovies] = useState([]);
 
-  // View mode: 'list' or 'movie-detail'
+  // View mode: 'list', 'movie-detail' (a saved movie) or 'movie-preview' (a web pick not in the library)
   const [viewMode, setViewMode] = useState('list');
   const [selectedItem, setSelectedItem] = useState(null);
+  const [previewMovie, setPreviewMovie] = useState(null);
 
-  // Card size: 'small', 'medium', 'large', 'extra-large'
-  const [cardSize, setCardSize] = useState('medium');
+  // Which section of the app is showing: 'library' or 'discover'
+  const [activeSection, setActiveSection] = useState('library');
+
+  // User preferences (accent, Discover defaults, poster size), persisted to localStorage
+  const [prefs, setPrefs] = useState(loadPrefs);
+  useEffect(() => { savePrefs(prefs); }, [prefs]);
+  useEffect(() => { applyAccent(prefs.accent); }, [prefs.accent]);
+  const handlePrefsChange = useCallback((patch) => setPrefs((prev) => ({ ...prev, ...patch })), []);
+
+  // Bumped by Settings to ask Discover to wipe its round history
+  const [clearDiscoverSignal, setClearDiscoverSignal] = useState(0);
 
   // Modals
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isNewListOpen, setIsNewListOpen] = useState(false);
-  const [isRecommendOpen, setIsRecommendOpen] = useState(false);
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isTrashOpen, setIsTrashOpen] = useState(false);
 
   // Loading & Network state
   const [isLoadingLists, setIsLoadingLists] = useState(true);
@@ -403,7 +416,7 @@ export default function App() {
 
 
   // 6. Add Movie to List Handler
-  const handleAddMovie = async (listId, movieData) => {
+  const handleAddMovie = async (listId, movieData, { openDetail = true } = {}) => {
     let initialStatus = 'plan_to_watch';
     if (activeListId === 'watching') initialStatus = 'watching';
     if (activeListId === 'completed') initialStatus = 'completed';
@@ -421,8 +434,9 @@ export default function App() {
     // Refresh movies
     await fetchAllMovies();
 
-    // Open detail view for the newly added movie
-    if (newItem) {
+    // Open detail view for the newly added movie (Discover adds quietly and stays put)
+    if (newItem && openDetail) {
+      setPreviewMovie(null);
       setSelectedItem(newItem);
       setViewMode('movie-detail');
     }
@@ -489,33 +503,16 @@ export default function App() {
     }
   };
 
+  // Switching sections always lands on that section's main view, never a stale detail page
+  const selectSection = useCallback((section) => {
+    setActiveSection(section);
+    setViewMode('list');
+    setSelectedItem(null);
+    setPreviewMovie(null);
+  }, []);
+
   // Global Keyboard Shortcuts
   useEffect(() => {
-    const matchesShortcut = (e, shortcutStr) => {
-      if (!shortcutStr) return false;
-      const parts = shortcutStr.split('+');
-      const targetKey = parts[parts.length - 1].toLowerCase();
-      const requiresCtrl = parts.includes('Ctrl');
-      const requiresAlt = parts.includes('Alt');
-      const requiresShift = parts.includes('Shift');
-      const requiresCmd = parts.includes('Cmd') || parts.includes('Meta');
-
-      if (requiresCtrl && !e.ctrlKey) return false;
-      if (!requiresCtrl && e.ctrlKey && targetKey !== 'control') return false;
-
-      if (requiresAlt && !e.altKey) return false;
-      if (!requiresAlt && e.altKey && targetKey !== 'alt') return false;
-
-      if (requiresShift && !e.shiftKey) return false;
-      if (!requiresShift && e.shiftKey && targetKey !== 'shift') return false;
-
-      if (requiresCmd && !e.metaKey) return false;
-
-      const eventKey = e.key.toLowerCase();
-      if (targetKey === 'space' && eventKey === ' ') return true;
-      return eventKey === targetKey;
-    };
-
     const handleKeyDown = (e) => {
       // Escape closes modals or exits detail view
       if (e.key === 'Escape') {
@@ -531,37 +528,64 @@ export default function App() {
           setIsNewListOpen(false);
           return;
         }
-        if (isRecommendOpen) {
-          setIsRecommendOpen(false);
-          return;
-        }
-        if (isChatOpen) {
-          setIsChatOpen(false);
-          return;
-        }
-        if (viewMode === 'movie-detail') {
+        if (viewMode !== 'list') {
           setViewMode('list');
           setSelectedItem(null);
+          setPreviewMovie(null);
           return;
         }
       }
 
-      // If user is typing in an input/textarea/select, don't trigger non-Escape shortcuts
-      const tag = (e.target?.tagName || '').toLowerCase();
-      const isInput = tag === 'input' || tag === 'textarea' || tag === 'select';
-      if (isInput) return;
+      // Every shortcut uses Ctrl or Alt, so they stay live while typing in a field
+      // (for example the movie-count box in Discover).
 
-      // Toggle Sidebar (default Alt+B)
+      // Open / close Settings (default Ctrl+,)
+      if (matchesShortcut(e, shortcuts.settings)) {
+        e.preventDefault();
+        setIsSettingsOpen((prev) => !prev);
+        return;
+      }
+
+      // Nothing else fires while Settings is open
+      if (isSettingsOpen) return;
+
+      // Toggle Trash (default Ctrl+Shift+Backspace)
+      if (matchesShortcut(e, shortcuts.toggleTrash)) {
+        e.preventDefault();
+        setIsTrashOpen((prev) => !prev);
+        return;
+      }
+
+      // Toggle left sidebar (default Alt+B)
       if (matchesShortcut(e, shortcuts.toggleSidebar)) {
         e.preventDefault();
         setIsSidebarOpen((prev) => !prev);
         return;
       }
 
-      // Open Settings (default Ctrl+,)
-      if (matchesShortcut(e, shortcuts.settings)) {
+      // Toggle the Discover filters panel (default Ctrl+Alt+B)
+      if (matchesShortcut(e, shortcuts.toggleFilters)) {
         e.preventDefault();
-        setIsSettingsOpen(true);
+        if (activeSection === 'discover' && viewMode === 'list') {
+          setPrefs((prev) => ({ ...prev, filtersOpen: !prev.filtersOpen }));
+        }
+        return;
+      }
+
+      // Switch section (default Ctrl+Shift+1 / Ctrl+Shift+2)
+      if (matchesShortcut(e, shortcuts.goLibrary)) {
+        e.preventDefault();
+        selectSection('library');
+        return;
+      }
+      if (matchesShortcut(e, shortcuts.goDiscover)) {
+        e.preventDefault();
+        selectSection('discover');
+        return;
+      }
+      if (matchesShortcut(e, shortcuts.goSchedule)) {
+        e.preventDefault();
+        selectSection('schedule');
         return;
       }
 
@@ -576,13 +600,12 @@ export default function App() {
       if (matchesShortcut(e, shortcuts.addMovie)) {
         e.preventDefault();
         setIsSearchOpen(true);
-        return;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcuts, isSettingsOpen, isSearchOpen, isNewListOpen, isRecommendOpen, isChatOpen, viewMode]);
+  }, [shortcuts, isSettingsOpen, isSearchOpen, isNewListOpen, viewMode, activeSection, selectSection]);
 
   // Set of movie IDs in the active list (for search modal to show 'Added')
   const existingMovieIds = useMemo(() => {
@@ -598,57 +621,130 @@ export default function App() {
     );
   }, [allMovies]);
 
+  const openItemDetail = (item) => {
+    setSelectedItem(item);
+    setViewMode('movie-detail');
+  };
+
+  // A web recommendation opened from Discover. Nothing is saved: the extra TMDB lookup only
+  // fills in cast, runtime and so on.
+  const openWebPreview = useCallback(async (movie) => {
+    setSelectedItem(null);
+    setPreviewMovie(movie);
+    setViewMode('movie-preview');
+    try {
+      const full = await getTMDBMovie(movie.tmdb_id);
+      setPreviewMovie((current) => (current && current.tmdb_id === movie.tmdb_id ? { ...movie, ...full } : current));
+    } catch (err) {
+      console.warn('Could not load full movie details:', err);
+    }
+  }, []);
+
+  const closeDetail = () => {
+    setViewMode('list');
+    setSelectedItem(null);
+    setPreviewMovie(null);
+  };
+
+  let detailPage = null;
+  if (viewMode === 'movie-detail' && selectedItem) {
+    detailPage = (
+      <MovieDetailPage
+        item={selectedItem}
+        onBack={closeDetail}
+        onUpdateItem={handleUpdateItem}
+        onRemoveItem={handleRemoveItem}
+      />
+    );
+  } else if (viewMode === 'movie-preview' && previewMovie) {
+    detailPage = (
+      <MovieDetailPage
+        item={{ id: null, movie: previewMovie }}
+        isPreview
+        lists={lists}
+        onAdd={(listId) => handleAddMovie(listId, previewMovie)}
+        onBack={closeDetail}
+      />
+    );
+  }
+
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--bg-void)' }}>
       {/* Activity Rail */}
       <ActivityRail
+        activeSection={activeSection}
+        onSelectSection={selectSection}
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={handleToggleSidebar}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenTrash={() => setIsTrashOpen(true)}
         shortcuts={shortcuts}
         totalMoviesCount={totalAllCount}
       />
 
-      {/* Sidebar */}
-      <Sidebar
-        isOpen={isSidebarOpen}
+      {/* Library section */}
+      {activeSection === 'library' && (
+        <>
+          <Sidebar
+            isOpen={isSidebarOpen}
+            lists={lists}
+            activeListId={activeListId}
+            onSelectList={(id) => {
+              setActiveListId(id);
+              setViewMode('list');
+            }}
+            onOpenNewList={() => setIsNewListOpen(true)}
+            onReorderCustomLists={handleReorderCustomLists}
+            onDeleteList={handleDeleteList}
+            onToggleFavourite={handleToggleFavourite}
+            totalAllMoviesCount={totalAllCount}
+            statusCounts={statusCounts}
+          />
+
+          {detailPage || (
+            <MovieList
+              currentList={currentListObj}
+              items={displayedMovies}
+              selectedItemId={selectedItem?.id}
+              onSelectItem={openItemDetail}
+              onOpenSearch={() => setIsSearchOpen(true)}
+              isLoading={isLoadingMovies}
+              cardSize={prefs.cardSize}
+              shortcuts={shortcuts}
+              onRemoveItem={handleRemoveItem}
+            />
+          )}
+        </>
+      )}
+
+      {/* Discover section: stays mounted while hidden so the bag, rounds and filters survive a trip to Library */}
+      <Discover
+        visible={activeSection === 'discover'}
+        items={allMovies}
         lists={lists}
-        activeListId={activeListId}
-        onSelectList={(id) => {
-          setActiveListId(id);
-          setViewMode('list');
-        }}
-        onOpenNewList={() => setIsNewListOpen(true)}
-        onReorderCustomLists={handleReorderCustomLists}
-        onDeleteList={handleDeleteList}
-        onToggleFavourite={handleToggleFavourite}
-        totalAllMoviesCount={totalAllCount}
-        statusCounts={statusCounts}
+        isLoading={isLoadingMovies}
+        libraryIds={allLibraryMovieIds}
+        prefs={prefs}
+        onPrefsChange={handlePrefsChange}
+        isSidebarOpen={isSidebarOpen}
+        isFiltersOpen={prefs.filtersOpen}
+        onSetFiltersOpen={(open) => handlePrefsChange({ filtersOpen: open })}
+        onOpenItem={openItemDetail}
+        onAddMovie={handleAddMovie}
+        onPreviewWeb={openWebPreview}
+        clearHistorySignal={clearDiscoverSignal}
+        detailNode={activeSection === 'discover' ? detailPage : null}
       />
 
-
-      {/* Main */}
-      {viewMode === 'movie-detail' && selectedItem ? (
-        <MovieDetailPage
-          item={selectedItem}
-          onBack={() => { setViewMode('list'); setSelectedItem(null); }}
-          onUpdateItem={handleUpdateItem}
-          onRemoveItem={handleRemoveItem}
-        />
-      ) : (
-        <MovieList
-          currentList={currentListObj}
-          items={displayedMovies}
-          selectedItemId={selectedItem?.id}
-          onSelectItem={(item) => { setSelectedItem(item); setViewMode('movie-detail'); }}
-          onOpenSearch={() => setIsSearchOpen(true)}
-          onOpenRecommendations={() => setIsRecommendOpen(true)}
-          onOpenChat={() => setIsChatOpen(true)}
-          isLoading={isLoadingMovies}
-          cardSize={cardSize}
-          onCardSizeChange={setCardSize}
-          shortcuts={shortcuts}
-          onRemoveItem={handleRemoveItem}
+      {/* Schedule section: mounted only while active, since its calendar and modal have no
+          cross-section state worth keeping warm (unlike Discover's rounds/shortlist bag). */}
+      {activeSection === 'schedule' && (
+        <Schedule
+          visible
+          items={allMovies}
+          lists={lists}
+          isSidebarOpen={isSidebarOpen}
+          prefs={prefs}
         />
       )}
 
@@ -659,6 +755,9 @@ export default function App() {
         shortcuts={shortcuts}
         onSaveShortcuts={handleSaveShortcuts}
         onResetShortcuts={handleResetShortcuts}
+        prefs={prefs}
+        onPrefsChange={handlePrefsChange}
+        onClearDiscoverHistory={() => setClearDiscoverSignal((n) => n + 1)}
       />
 
       {/* TMDB Search Modal */}
@@ -671,26 +770,6 @@ export default function App() {
         existingMovieIds={existingMovieIds}
       />
 
-      {/* Recommendation Modal */}
-      <RecommendationModal
-        isOpen={isRecommendOpen}
-        onClose={() => setIsRecommendOpen(false)}
-        lists={lists}
-        currentList={currentListObj}
-        onAddMovie={handleAddMovie}
-        existingMovieIds={allLibraryMovieIds}
-      />
-
-      {/* Chat Modal */}
-      <ChatModal
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-        lists={lists}
-        currentList={currentListObj}
-        onAddMovie={handleAddMovie}
-        existingMovieIds={allLibraryMovieIds}
-      />
-
       {/* New List Modal */}
       <NewListModal
         isOpen={isNewListOpen}
@@ -698,11 +777,18 @@ export default function App() {
         onCreate={handleCreateList}
       />
 
+      {/* Trash */}
+      <TrashModal
+        isOpen={isTrashOpen}
+        onClose={() => setIsTrashOpen(false)}
+        onChanged={fetchLists}
+      />
+
       {/* Toast */}
       {toastMessage && (
         <div className="toast animate-fade-in">
           {toastMessage.type === 'success'
-            ? <CheckCircle2 size={15} style={{ color: 'var(--gold)', flexShrink: 0 }} />
+            ? <CheckCircle2 size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
             : <AlertCircle  size={15} style={{ color: 'var(--red)',  flexShrink: 0 }} />}
           <span>{toastMessage.message}</span>
         </div>
