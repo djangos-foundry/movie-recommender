@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { User, Settings, LogOut, Film, Compass } from 'lucide-react';
+import { User, Settings, LogOut, Film, Compass, CalendarDays, Trash2 } from 'lucide-react';
 
 const SECTIONS = [
   { id: 'library', label: 'Library', icon: Film, shortcutKey: 'goLibrary', fallback: 'Ctrl+Shift+1' },
   { id: 'discover', label: 'Discover', icon: Compass, shortcutKey: 'goDiscover', fallback: 'Ctrl+Shift+2' },
+  { id: 'schedule', label: 'Calendar', icon: CalendarDays, shortcutKey: 'goSchedule', fallback: 'Ctrl+Shift+3' },
 ];
 
 export default function ActivityRail({
@@ -12,6 +13,7 @@ export default function ActivityRail({
   isSidebarOpen = true,
   onToggleSidebar,
   onOpenSettings,
+  onOpenTrash,
   shortcuts = {},
   totalMoviesCount = 0,
 }) {
@@ -92,8 +94,19 @@ export default function ActivityRail({
         </nav>
       </div>
 
-      {/* Bottom: Settings + Toggle */}
+      {/* Bottom: Trash + Settings + Toggle */}
       <div className="activity-rail__bottom">
+        <div className="activity-rail__icon-wrap" data-tooltip={`Trash (${shortcuts.toggleTrash || 'Ctrl+Shift+Backspace'})`}>
+          <button
+            type="button"
+            onClick={onOpenTrash}
+            className="activity-rail__icon-btn"
+            aria-label="Trash"
+          >
+            <Trash2 size={18} />
+          </button>
+        </div>
+
         <div className="activity-rail__icon-wrap" data-tooltip={`Settings (${shortcuts.settings || 'Ctrl+,'})`}>
           <button
             type="button"

@@ -5,9 +5,11 @@ export const DEFAULT_SHORTCUTS = {
   toggleFilters: 'Ctrl+Alt+B',
   goLibrary: 'Ctrl+Shift+1',
   goDiscover: 'Ctrl+Shift+2',
+  goSchedule: 'Ctrl+Shift+3',
   search: 'Ctrl+K',
   addMovie: 'Alt+N',
   settings: 'Ctrl+,',
+  toggleTrash: 'Ctrl+Shift+Backspace',
 };
 
 // With Shift held, e.key for the number row is "!" or "@" and Alt can change

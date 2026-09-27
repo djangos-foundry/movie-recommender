@@ -1,5 +1,15 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils import timezone
+
+TRASH_RETENTION_DAYS = 30
+
+
+class ActiveManager(models.Manager):
+    """Default manager: hides soft-deleted (trashed) rows everywhere the app
+    already queries these models, so no call site needs to know trash exists."""
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted_at__isnull=True)
 
 
 class MovieList(models.Model):
@@ -10,6 +20,10 @@ class MovieList(models.Model):
     is_favourite = models.BooleanField(default=False)
     order = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    objects = ActiveManager()
+    all_objects = models.Manager()  # includes trashed rows — trash views only
 
     class Meta:
         ordering = ['order', 'created_at']
@@ -55,6 +69,29 @@ class Movie(models.Model):
         return self.title
 
 
+class ScheduledWatch(models.Model):
+    """
+    A planned watch session for a library movie: 'watch Chennai Express on
+    Saturday from 2:00 PM'. Kept deliberately close to a Google Calendar
+    event's shape (summary/start/end/description) so pushing it to a real
+    Google Calendar later is a straight field mapping. google_event_id stays
+    empty until that sync exists.
+    """
+    movie = models.ForeignKey(Movie, on_delete=models.CASCADE, related_name='scheduled_watches')
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    notes = models.TextField(blank=True, default='')
+    is_watched = models.BooleanField(default=False)
+    google_event_id = models.CharField(max_length=255, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['start_time']
+
+    def __str__(self):
+        return f"{self.movie.title} @ {self.start_time:%Y-%m-%d %H:%M}"
+
+
 class MovieListItem(models.Model):
     STATUS_CHOICES = [
         ('plan_to_watch', 'Plan to Watch'),
@@ -73,6 +110,10 @@ class MovieListItem(models.Model):
     )
     user_notes = models.TextField(blank=True, default='')
     added_at = models.DateTimeField(auto_now_add=True)
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    objects = ActiveManager()
+    all_objects = models.Manager()  # includes trashed rows — trash views only
 
     class Meta:
         unique_together = ('list', 'movie')

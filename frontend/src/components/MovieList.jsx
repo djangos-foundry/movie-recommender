@@ -8,13 +8,6 @@ const STATUS_BADGES = {
   dropped:       { label: 'Dropped',        cls: 'badge--red' },
 };
 
-const SIZES = [
-  { id: 'small',       label: 'S' },
-  { id: 'medium',      label: 'M' },
-  { id: 'large',       label: 'L' },
-  { id: 'extra-large', label: 'XL' },
-];
-
 const SORT_OPTIONS = [
   { value: 'added',  label: 'Recently Added' },
   { value: 'rating', label: 'Highest Rated' },
@@ -30,7 +23,6 @@ export default function MovieList({
   onOpenSearch,
   isLoading = false,
   cardSize = 'medium',
-  onCardSizeChange,
   shortcuts = {},
   onRemoveItem,
 }) {
@@ -125,21 +117,6 @@ export default function MovieList({
                 </div>
               </>
             )}
-          </div>
-
-          {/* Card size */}
-          <div className="topbar__sizes">
-            {SIZES.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => onCardSizeChange?.(s.id)}
-                className={`topbar__size-btn ${cardSize === s.id ? 'is-active' : ''}`}
-                title={`${s.id} cards`}
-              >
-                {s.label}
-              </button>
-            ))}
           </div>
 
           {/* Add movie */}

@@ -1,0 +1,1447 @@
+/* ==========================================================================
+   SCHEDULE
+   Built on the same design tokens as Library/Discover (see :root in
+   index.css), so all three sections read as one app. The left sidebar reuses
+   the Library sidebar classes (.sidebar, .sidebar__nav-item, ...); only
+   Schedule-specific pieces live here, plus the FullCalendar theme overrides
+   at the bottom.
+   ========================================================================== */
+
+.sc {
+  --sc-bg: var(--bg-base);
+  --sc-panel: var(--bg-deep);
+  --sc-raised: var(--bg-raised);
+  --sc-surface: var(--bg-surface);
+  --sc-hover: var(--bg-hover);
+  --sc-line: var(--border-subtle);
+  --sc-line-faint: var(--border-faint);
+  --sc-text: var(--text-primary);
+  --sc-mute: var(--text-secondary);
+  --sc-faint: var(--text-muted);
+  --sc-accent: var(--accent);
+  --sc-on-accent: var(--on-accent);
+  --sc-soft: var(--accent-dim);
+  --sc-topbar-h: var(--topbar-h);
+}
+
+.sc *,
+.sc *::before,
+.sc *::after {
+  box-sizing: border-box;
+}
+
+.sc-mute {
+  color: var(--sc-mute);
+}
+
+.sc-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--sc-faint);
+}
+
+.sc-spinner {
+  animation: spin 0.9s linear infinite;
+}
+
+.sc-notice {
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--sc-line);
+  background: var(--sc-panel);
+  font-size: 12px;
+  color: var(--sc-mute);
+}
+
+.sc-notice--error {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fca5a5;
+}
+
+/* ── Buttons, segmented control ──────────────────────────────────────────── */
+
+.sc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--sc-line);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--sc-text);
+  background: var(--sc-surface);
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+
+.sc-btn:hover:not(:disabled) {
+  background: var(--sc-hover);
+}
+
+.sc-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sc-btn--icon {
+  width: 32px;
+  padding: 0;
+}
+
+.sc-btn--icon.is-on {
+  background: var(--sc-soft);
+  border-color: var(--sc-accent);
+  color: var(--sc-accent);
+}
+
+.sc-btn--round {
+  border-radius: 50%;
+}
+
+.sc-btn--sm {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11.5px;
+}
+
+.sc-btn--primary {
+  background: var(--sc-accent);
+  color: var(--sc-on-accent);
+  border-color: var(--sc-accent);
+}
+
+.sc-btn--primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.sc-btn--danger {
+  color: var(--red);
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+.sc-btn--danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.sc-icon-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sc-mute);
+}
+
+.sc-icon-btn:hover {
+  background: var(--sc-hover);
+  color: var(--sc-text);
+}
+
+.sc-segs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--sc-surface);
+  border: 1px solid var(--sc-line-faint);
+}
+
+.sc-seg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sc-faint);
+}
+
+.sc-seg:hover {
+  color: var(--sc-text);
+}
+
+.sc-seg.is-on {
+  background: var(--sc-accent);
+  color: var(--sc-on-accent);
+}
+
+.sc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.sc-pill--green {
+  background: rgba(52, 211, 153, 0.14);
+  color: var(--green);
+}
+
+.sc-star {
+  color: var(--star);
+}
+
+/* ── Left nav extras: the Lists filter reuses Library's own
+   .sidebar__list-item / .sidebar__list-icon classes for a 1:1 look; only the
+   week-at-a-glance card is Calendar-specific. ─────────────────────────────── */
+
+.sc-glance {
+  flex-shrink: 0;
+  margin: 8px 12px 14px;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--sc-line);
+  background: var(--sc-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.sc-glance__row {
+  font-size: 12px;
+  color: var(--sc-mute);
+  line-height: 1.4;
+}
+
+.sc-glance__row--strong {
+  font-size: 13px;
+  color: var(--sc-text);
+}
+
+.sc-glance__row b,
+.sc-glance__row--strong b {
+  font-weight: 700;
+  color: var(--sc-text);
+}
+
+/* ── Right panel: the draggable library tray ─────────────────────────────── */
+
+.sc-library {
+  height: 100vh;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--sc-panel);
+  border-left: 1px solid var(--border-faint);
+  overflow: hidden;
+  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    min-width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sc-library--open {
+  width: 296px;
+  min-width: 296px;
+}
+
+.sc-library--closed {
+  width: 0;
+  min-width: 0;
+  border-left-width: 0;
+}
+
+.sc-library__head {
+  height: var(--sc-topbar-h);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--sc-line-faint);
+}
+
+.sc-library__title {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sc-library__count {
+  font-size: 12px;
+  color: var(--sc-faint);
+}
+
+.sc-library__search-wrap {
+  padding: 12px 14px;
+  flex-shrink: 0;
+}
+
+.sc-library__footer {
+  flex-shrink: 0;
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--border-faint);
+}
+
+.sc-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--sc-line-faint);
+  background: var(--sc-surface);
+  color: var(--sc-faint);
+}
+
+.sc-search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  color: var(--sc-text);
+  font-size: 12.5px;
+  border: none;
+  outline: none;
+  appearance: none;
+}
+
+.sc-search:focus-within {
+  border-color: var(--sc-accent);
+}
+
+.sc-search input::placeholder {
+  color: var(--sc-faint);
+}
+
+.sc-tray {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sc-tray-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--sc-line);
+  background: var(--sc-raised);
+  cursor: grab;
+}
+
+.sc-tray-item:hover {
+  background: var(--sc-surface);
+  border-color: var(--border-mid);
+}
+
+.sc-tray-item:active {
+  cursor: grabbing;
+}
+
+.sc-tray-item__poster {
+  position: relative;
+  flex-shrink: 0;
+  width: 36px;
+  height: 54px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--sc-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sc-faint);
+}
+
+.sc-tray-item__poster img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sc-tray-item__info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sc-tray-item__info strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sc-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sc-tray-item__info span {
+  font-size: 11px;
+  color: var(--sc-faint);
+}
+
+.sc-tray-item__add {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--sc-mute);
+  background: var(--sc-panel);
+  margin-left: auto;
+}
+
+.sc-tray-item:hover .sc-tray-item__add {
+  display: inline-flex;
+}
+
+.sc-tray-item__add:hover {
+  color: var(--sc-text);
+  background: var(--sc-hover);
+}
+
+/* ── Main column ──────────────────────────────────────────────────────────── */
+
+.sc-main {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--sc-bg);
+  color: var(--sc-text);
+}
+
+.sc-topbar {
+  height: var(--sc-topbar-h);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 20px;
+  background: var(--sc-panel);
+  border-bottom: 1px solid var(--sc-line-faint);
+}
+
+.sc-topbar__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sc-topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sc-datenav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sc-topbar__title {
+  margin-left: 6px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.sc-topbar__strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sc-text);
+}
+
+.sc-topbar__sub {
+  font-size: 11px;
+  color: var(--sc-faint);
+}
+
+.sc-topbar__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.sc-topbar__title-row .sc-topbar__strong {
+  font-size: 16px;
+}
+
+.sc-topbar__title-row .sc-topbar__sub {
+  font-size: 13px;
+  color: var(--sc-mute);
+}
+
+.sc-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.sc-calendar-wrap {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px 20px;
+}
+
+.sc-agenda-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 20px 32px;
+}
+
+/* Agenda view: cards on the left (flexes with available width), the mini
+   calendar fixed-width on the right — so toggling the library panel resizes
+   the cards column while the calendar stays pinned to the cards' right edge.
+   The OUTER layout owns the scrollbar (not the cards column) so it lands at
+   the true right edge of the content area instead of in the seam between
+   the cards and the calendar; the calendar stays put via position:sticky as
+   that outer container scrolls. */
+.sc-agenda-layout {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  overflow-y: auto;
+}
+
+.sc-agenda-layout .sc-agenda-scroll {
+  overflow: visible;
+}
+
+.sc-agenda-cal {
+  position: sticky;
+  top: 20px;
+  flex-shrink: 0;
+  width: 360px;
+  margin: 20px 20px 20px 0;
+  padding: 18px;
+  background: var(--sc-raised);
+  border: 1px solid var(--sc-line);
+  border-radius: var(--radius-lg);
+}
+
+.sc-agenda-cal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.sc-agenda-cal__title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sc-agenda-cal__nav {
+  display: flex;
+  gap: 4px;
+}
+
+.sc-agenda-cal__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 4px;
+}
+
+.sc-agenda-cal__weekdays span {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--sc-faint);
+}
+
+.sc-agenda-cal__row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.sc-agenda-cal__day {
+  position: relative;
+  aspect-ratio: 1.3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  color: var(--sc-text);
+  border-radius: 8px;
+  cursor: default;
+}
+
+.sc-agenda-cal__day.is-muted {
+  color: var(--sc-faint);
+  opacity: 0.5;
+}
+
+.sc-agenda-cal__day.is-today {
+  background: var(--sc-accent);
+  color: var(--sc-on-accent);
+  font-weight: 700;
+}
+
+.sc-agenda-cal__dot {
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--sc-accent);
+}
+
+.sc-agenda-cal__day.is-today .sc-agenda-cal__dot {
+  background: var(--sc-on-accent);
+}
+
+.sc-agenda-cal__day:not(.is-muted):has(.sc-agenda-cal__dot) {
+  cursor: pointer;
+}
+
+.sc-agenda-cal__day:not(.is-muted):has(.sc-agenda-cal__dot):hover {
+  background: var(--sc-hover);
+}
+
+.sc-agenda-cal__day.is-today:has(.sc-agenda-cal__dot):hover {
+  background: var(--sc-accent-hover, var(--sc-accent));
+}
+
+.sc-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  text-align: center;
+}
+
+.sc-empty__title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.sc-empty__body {
+  max-width: 380px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--sc-mute);
+}
+
+/* ── Agenda view ──────────────────────────────────────────────────────────── */
+
+.sc-agenda {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.sc-agenda__group-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--sc-faint);
+  margin: 0 0 12px;
+}
+
+.sc-agenda-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: var(--sc-raised);
+  border: 1px solid var(--sc-line);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.sc-agenda-card:hover {
+  border-color: var(--border-mid);
+}
+
+.sc-agenda-card.is-watched {
+  opacity: 0.68;
+}
+
+.sc-agenda-card__when {
+  width: 52px;
+  flex-shrink: 0;
+  text-align: center;
+  border-right: 1px solid var(--sc-line-faint);
+  padding-right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.1;
+}
+
+.sc-agenda-card__when span:first-child {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--sc-accent);
+}
+
+.sc-agenda-card__when b {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.sc-agenda-card__poster {
+  position: relative;
+  flex-shrink: 0;
+  width: 58px;
+  height: 84px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--sc-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sc-faint);
+}
+
+.sc-agenda-card__poster img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sc-agenda-card__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+.sc-agenda-card__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--sc-text);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sc-agenda-card__title:hover {
+  color: var(--sc-accent);
+}
+
+.sc-agenda-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--sc-mute);
+}
+
+.sc-agenda-card__notes {
+  font-size: 12px;
+  color: var(--sc-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sc-agenda-card__actions {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.sc-agenda-card__actions .sc-btn {
+  border-radius: 6px;
+}
+
+.sc-agenda-card__tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sc-pill--list {
+  background: var(--sc-surface);
+  border: 1px solid var(--sc-line-faint);
+  color: var(--sc-mute);
+}
+
+.sc-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Kebab menu (Edit/Remove), opened from the "..." button next to Mark watched */
+.sc-kebab {
+  position: relative;
+}
+
+.sc-kebab__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+
+.sc-kebab__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 21;
+  min-width: 140px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--sc-raised);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.sc-kebab__menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--sc-text);
+  text-align: left;
+}
+
+.sc-kebab__menu button:hover {
+  background: var(--sc-hover);
+}
+
+.sc-kebab__menu button.is-danger {
+  color: var(--red);
+}
+
+.sc-kebab__menu button.is-danger:hover {
+  background: rgba(248, 113, 113, 0.1);
+}
+
+/* ── Modal ────────────────────────────────────────────────────────────────── */
+
+.sc-modal {
+  width: 460px;
+  max-width: 94vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--sc-raised);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+/* top/left/right are set inline per anchorStyleFor() in ScheduleModal.jsx,
+   positioned right beside the click/drop point. */
+.sc-modal--anchored {
+  position: fixed;
+  max-height: 86vh;
+  z-index: 40;
+}
+
+.sc-modal__header {
+  display: flex;
+  align-items: center;
+  padding: 14px 18px;
+  background: var(--sc-panel);
+  border-bottom: 1px solid var(--sc-line-faint);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.sc-modal__title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.sc-modal__close {
+  margin-left: auto;
+  color: var(--sc-faint);
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sc-modal__close:hover {
+  background: var(--sc-hover);
+  color: var(--sc-text);
+}
+
+.sc-modal__body {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sc-modal__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.sc-modal__spacer {
+  flex: 1;
+}
+
+.sc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sc-field__label {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--sc-faint);
+}
+
+.sc-row {
+  display: flex;
+  gap: 10px;
+}
+
+.sc-input {
+  height: 36px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--sc-line);
+  background: var(--sc-surface);
+  color: var(--sc-text);
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+}
+
+.sc-input--calc {
+  color: var(--sc-accent);
+  border-style: dashed;
+}
+
+.sc-textarea {
+  height: auto;
+  min-height: 56px;
+  padding: 8px 10px;
+  resize: vertical;
+  align-items: flex-start;
+}
+
+.sc-pick {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--sc-surface);
+  border: 1px solid var(--sc-line);
+  border-radius: var(--radius-md);
+  padding: 8px;
+}
+
+.sc-pick__poster {
+  position: relative;
+  flex-shrink: 0;
+  width: 38px;
+  height: 56px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--sc-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sc-faint);
+}
+
+.sc-pick__poster--sm {
+  width: 30px;
+  height: 44px;
+}
+
+.sc-pick__poster img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sc-pick__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sc-pick__info strong {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.sc-pick__info span {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11.5px;
+  color: var(--sc-mute);
+}
+
+.sc-pick__change {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--sc-accent);
+  padding: 4px 6px;
+}
+
+.sc-pick__change:hover {
+  text-decoration: underline;
+}
+
+.sc-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--sc-line);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  background: var(--sc-surface);
+}
+
+.sc-picker__list {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sc-picker__empty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--sc-faint);
+  text-align: center;
+}
+
+.sc-picker__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+
+.sc-picker__row:hover {
+  background: var(--sc-hover);
+}
+
+.sc-picker__row-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sc-picker__row-info strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sc-picker__row-info span {
+  font-size: 11px;
+  color: var(--sc-faint);
+}
+
+.sc-gcal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px dashed var(--border-mid);
+  border-radius: var(--radius-md);
+  color: var(--sc-faint);
+  font-size: 12px;
+}
+
+.sc-gcal__soon {
+  margin-left: auto;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--sc-surface);
+  color: var(--sc-faint);
+}
+
+/* ==========================================================================
+   FullCalendar theme — remap its CSS variables onto our design tokens so
+   Month/Week views sit inside the same dark shell as the rest of the app.
+   ========================================================================== */
+
+.sc-calendar-wrap .fc {
+  height: 100%;
+  --fc-border-color: var(--sc-line-faint);
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: var(--sc-surface);
+  --fc-list-event-hover-bg-color: var(--sc-hover);
+  --fc-today-bg-color: color-mix(in srgb, var(--sc-accent) 22%, var(--sc-raised));
+  --fc-now-indicator-color: var(--red);
+  --fc-event-bg-color: var(--sc-accent);
+  --fc-event-border-color: var(--sc-accent);
+  --fc-event-text-color: var(--sc-on-accent);
+  --fc-small-font-size: 11px;
+  font-family: inherit;
+  color: var(--sc-text);
+}
+
+.sc-calendar-wrap .fc-scrollgrid {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border-color: var(--sc-line);
+}
+
+.sc-calendar-wrap .fc-col-header-cell-cushion {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 10px 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--sc-faint);
+}
+
+/* Week view's day-column header replaces the cushion's content with
+   .sc-fc-daycol (left-aligned); the cushion itself must stretch full-width
+   and drop its own centering, or the (already-left-aligned) daycol box just
+   sits centered as a unit within the column instead of hugging its edge. */
+.sc-calendar-wrap .fc-timegrid .fc-col-header-cell-cushion {
+  text-align: left;
+  padding: 0; /* .sc-fc-daycol supplies its own (smaller) padding */
+}
+
+/* Week view's stacked "SUN / 4" day-column header (dayHeaderContent in
+   CalendarView.jsx), instead of FullCalendar's single-line default. */
+.sc-fc-daycol {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 10px 0 10px 12px;
+}
+
+.sc-fc-daycol__day {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  color: var(--sc-faint);
+}
+
+.sc-fc-daycol__num {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sc-text);
+}
+
+.sc-calendar-wrap .fc-day-today .sc-fc-daycol__num {
+  color: var(--sc-accent);
+}
+
+/* Comfortable hourly rows, not the cramped default 30-min grid. */
+.sc-calendar-wrap .fc-timegrid-slot {
+  height: 3.2em;
+}
+
+.sc-calendar-wrap .fc-timegrid-slot-label {
+  vertical-align: top;
+}
+
+.sc-calendar-wrap .fc-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: #333 transparent;
+}
+
+.sc-calendar-wrap .fc-scroller::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.sc-calendar-wrap .fc-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sc-calendar-wrap .fc-scroller::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 99px;
+}
+
+.sc-calendar-wrap .fc-scroller::-webkit-scrollbar-thumb:hover {
+  background: #4a4a4a;
+}
+
+/* The header row (day names) and its axis corner never have anything of
+   their own to scroll — they only exist to stay aligned with the scrollable
+   body below. Some OS/browser combos still paint a scrollbar track (with
+   arrow buttons) on a zero-content scrollable element even with
+   overflow:hidden set via a plain rule, so this belt-and-suspenders version
+   also strips the scrollbar itself on every engine. */
+.sc-calendar-wrap .fc-scrollgrid-section-header .fc-scroller,
+.sc-calendar-wrap .fc-scrollgrid-section-header .fc-scroller-harness,
+.sc-calendar-wrap thead {
+  overflow: hidden !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.sc-calendar-wrap .fc-scrollgrid-section-header .fc-scroller::-webkit-scrollbar,
+.sc-calendar-wrap .fc-scrollgrid-section-header .fc-scroller-harness::-webkit-scrollbar,
+.sc-calendar-wrap thead::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.sc-calendar-wrap .fc-daygrid-day-number {
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--sc-mute);
+}
+
+.sc-calendar-wrap .fc-day-today .fc-daygrid-day-number {
+  color: var(--sc-on-accent);
+  background: var(--sc-accent);
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 4px 6px 0 0;
+  font-weight: 700;
+}
+
+.sc-calendar-wrap .fc-daygrid-day-frame,
+.sc-calendar-wrap .fc-timegrid-col-frame {
+  background: var(--sc-raised);
+}
+
+/* The day-frame's own opaque background otherwise paints over FullCalendar's
+   --fc-today-bg-color wash on the <td>, leaving only the number badge
+   visible. Re-apply the tint here, plus a dashed outline around the whole
+   cell, so "today" reads as a full-cell highlight like the mockup. */
+.sc-calendar-wrap .fc-day-today .fc-daygrid-day-frame {
+  background: var(--fc-today-bg-color);
+  outline: 1.5px dashed var(--sc-accent);
+  outline-offset: -1.5px;
+}
+
+/* Now-indicator (current time line in Week view) — a bold Google-style red
+   line with a filled dot anchored at its left edge, instead of FullCalendar's
+   default thin line + tiny triangle arrow. */
+.sc-calendar-wrap .fc-timegrid-now-indicator-arrow {
+  display: none;
+}
+
+/* Let the dot bleed left past the column edge into the time-axis gutter,
+   like Google Calendar, instead of being clipped by FullCalendar's own
+   overflow:hidden on this container. */
+.sc-calendar-wrap .fc-timegrid-now-indicator-container {
+  overflow: visible;
+}
+
+.sc-calendar-wrap .fc-timegrid-now-indicator-line {
+  border-top-width: 2px;
+  z-index: 5;
+  overflow: visible;
+}
+
+.sc-calendar-wrap .fc-timegrid-now-indicator-line::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fc-now-indicator-color);
+}
+
+.sc-calendar-wrap .fc-day-other .fc-daygrid-day-frame {
+  background: var(--sc-panel);
+}
+
+.sc-calendar-wrap .fc-day-other .fc-daygrid-day-number {
+  color: var(--sc-faint);
+}
+
+.sc-calendar-wrap .fc-highlight {
+  background: var(--sc-soft);
+  outline: 1px dashed var(--sc-accent);
+  outline-offset: -2px;
+}
+
+.sc-calendar-wrap .fc-timegrid-slot-label-cushion {
+  font-size: 10.5px;
+  color: var(--sc-faint);
+}
+
+.sc-calendar-wrap .fc-timegrid-axis {
+  border-color: var(--sc-line-faint);
+}
+
+.sc-calendar-wrap .fc-more-link {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--sc-accent);
+}
+
+.sc-calendar-wrap .fc-daygrid-more-link {
+  color: var(--sc-accent);
+}
+
+.sc-calendar-wrap .fc-popover {
+  background: var(--sc-raised);
+  border: 1px solid var(--sc-line);
+  color: var(--sc-text);
+}
+
+.sc-calendar-wrap .fc-popover-header {
+  background: var(--sc-panel);
+}
+
+/* Events */
+.sc-calendar-wrap .fc-event {
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.sc-fc-event {
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.sc-fc-event__inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-left: 3px solid var(--sc-accent);
+  background: color-mix(in srgb, var(--sc-accent) 18%, var(--sc-raised));
+}
+
+.fc-timegrid-event .sc-fc-event__inner {
+  height: 100%;
+  align-items: flex-start;
+  padding: 5px 7px;
+}
+
+.sc-fc-event--watched .sc-fc-event__inner {
+  border-left-color: var(--green);
+  background: color-mix(in srgb, var(--green) 16%, var(--sc-raised));
+  opacity: 0.75;
+}
+
+/* The not-yet-saved placeholder shown the instant a movie is dropped or an
+   empty slot is clicked, while the "Schedule a watch" dialog is open. */
+.sc-fc-event--pending .sc-fc-event__inner {
+  border-left-style: dashed;
+  background: color-mix(in srgb, var(--sc-accent) 10%, var(--sc-raised));
+  opacity: 0.8;
+}
+
+.sc-fc-event__poster {
+  position: relative;
+  flex-shrink: 0;
+  width: 20px;
+  height: 30px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--sc-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sc-faint);
+}
+
+.sc-fc-event__poster img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sc-fc-event__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.sc-fc-event__text b {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sc-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sc-fc-event__text small {
+  font-size: 10px;
+  color: var(--sc-mute);
+}

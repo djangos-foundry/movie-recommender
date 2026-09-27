@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Palette, Keyboard, Compass, Minus, Plus } from 'lucide-react';
+import { X, Palette, Keyboard, Compass, Minus, Plus, CalendarDays } from 'lucide-react';
 import '../settings.css';
 import { ACCENTS } from '../lib/prefs';
 import { DEFAULT_SHORTCUTS, formatShortcut, shortcutFromEvent } from '../lib/shortcuts';
@@ -12,6 +12,7 @@ const SECTIONS = [
   { id: 'appearance', label: 'Appearance', icon: Palette, subtitle: 'Make the app look the way you like.' },
   { id: 'shortcuts', label: 'Keyboard shortcuts', icon: Keyboard, subtitle: 'Click Edit, then press the new keys.' },
   { id: 'discover', label: 'Discover', icon: Compass, subtitle: 'Control how recommendations are drawn and shown.' },
+  { id: 'calendar', label: 'Calendar', icon: CalendarDays, subtitle: 'Choose what shows on scheduled-watch cards.' },
 ];
 
 const SHORTCUT_ROWS = [
@@ -19,9 +20,11 @@ const SHORTCUT_ROWS = [
   { key: 'toggleFilters', label: 'Toggle filters panel' },
   { key: 'goLibrary', label: 'Go to Library' },
   { key: 'goDiscover', label: 'Go to Discover' },
+  { key: 'goSchedule', label: 'Go to Calendar' },
   { key: 'search', label: 'Search and add a movie' },
   { key: 'addMovie', label: 'Add movie to list' },
   { key: 'settings', label: 'Open settings' },
+  { key: 'toggleTrash', label: 'Open Trash' },
 ];
 
 const POSTER_SIZES = [
@@ -283,6 +286,17 @@ export default function SettingsModal({
                   >
                     {historyCleared ? 'Cleared' : 'Clear history'}
                   </button>
+                </Row>
+              </div>
+            )}
+
+            {section === 'calendar' && (
+              <div className="st-rows">
+                <Row title="Show list on events" description="Display which list a scheduled movie belongs to on its Agenda card.">
+                  <Switch label="Show list on events" checked={prefs.showEventList} onChange={(v) => onPrefsChange({ showEventList: v })} />
+                </Row>
+                <Row title="Show watch status on events" description="Display Plan to Watch / Watching / Completed / Dropped on its Agenda card.">
+                  <Switch label="Show watch status on events" checked={prefs.showEventStatus} onChange={(v) => onPrefsChange({ showEventStatus: v })} />
                 </Row>
               </div>
             )}

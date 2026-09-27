@@ -16,6 +16,8 @@ export const DEFAULT_PREFS = {
   showFilterChips: true,
   cardSize: 'medium',
   filtersOpen: false,
+  showEventList: true,
+  showEventStatus: false,
 };
 
 const PREFS_KEY = 'cinetrack_prefs';

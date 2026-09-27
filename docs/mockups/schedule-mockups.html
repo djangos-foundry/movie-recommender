@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CineTrack – Schedule mockups</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap">
+<style>
+/* Tokens copied from frontend/src/index.css so the mockups match Library / Discover */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --accent:#a394f5;--on-accent:#17151f;
+  --accent-dim:color-mix(in srgb,var(--accent) 15%,transparent);
+  --accent-hover:color-mix(in srgb,var(--accent) 86%,#fff);
+  --star:#f5c518;
+  --bg-void:#0a0a0a;--bg-deep:#111;--bg-base:#161616;--bg-raised:#1e1e1e;--bg-surface:#252525;--bg-hover:#2e2e2e;
+  --border-faint:rgba(255,255,255,.06);--border-subtle:rgba(255,255,255,.10);--border-mid:rgba(255,255,255,.14);
+  --text-primary:#f1f1f1;--text-secondary:#9a9a9a;--text-muted:#5a5a5a;
+  --blue:#60a5fa;--amber:#fbbf24;--green:#34d399;--red:#f87171;
+  --rail-w:52px;--sidebar-w:224px;--topbar-h:56px;--radius-sm:6px;--radius-md:10px;--radius-lg:14px;
+  font-family:'Inter',-apple-system,'Segoe UI',sans-serif;font-size:13px;color-scheme:dark;
+}
+html,body{height:100%;background:var(--bg-void);color:var(--text-primary);-webkit-font-smoothing:antialiased}
+button{cursor:pointer;border:none;background:transparent;font-family:inherit;color:inherit}
+body{display:flex;flex-direction:column}
+
+/* ── Mockup switcher (not part of the app) ── */
+.mock-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#000;border-bottom:1px solid var(--border-subtle);flex-shrink:0}
+.mock-bar b{font-size:12px;color:var(--text-secondary);font-weight:600;margin-right:6px}
+.mock-tab{padding:6px 12px;border-radius:99px;border:1px solid var(--border-subtle);font-size:12px;color:var(--text-secondary)}
+.mock-tab.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:600}
+.mock-note{margin-left:auto;font-size:11.5px;color:var(--text-muted);max-width:520px;text-align:right}
+
+/* ── App shell ── */
+.app{flex:1;display:flex;min-height:0}
+.rail{width:var(--rail-w);background:var(--bg-void);border-right:1px solid var(--border-faint);display:flex;flex-direction:column;justify-content:space-between;align-items:center;padding:10px 0;flex-shrink:0}
+.rail .top,.rail .bot{display:flex;flex-direction:column;align-items:center;gap:6px}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--accent-dim);color:var(--accent);font-size:11px;font-weight:700;display:grid;place-items:center}
+.rail hr{width:24px;border:0;border-top:1px solid var(--border-subtle);margin:6px 0}
+.rail-btn{width:36px;height:36px;border-radius:var(--radius-md);display:grid;place-items:center;color:var(--text-secondary);position:relative}
+.rail-btn:hover{background:var(--bg-surface);color:var(--text-primary)}
+.rail-btn.on{color:var(--accent);background:var(--accent-dim)}
+.rail-btn.on::before{content:"";position:absolute;left:-8px;top:8px;bottom:8px;width:2px;border-radius:2px;background:var(--accent)}
+svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+svg.s{width:14px;height:14px}
+
+.sidebar{width:var(--sidebar-w);background:var(--bg-deep);border-right:1px solid var(--border-faint);display:flex;flex-direction:column;flex-shrink:0;min-height:0}
+.brand{height:var(--topbar-h);display:flex;align-items:center;gap:9px;padding:0 16px;border-bottom:1px solid var(--border-faint);font-weight:700;font-size:14px;letter-spacing:.2px}
+.brand i{width:22px;height:22px;border-radius:6px;background:var(--accent);display:grid;place-items:center;color:var(--on-accent);font-style:normal;font-size:12px}
+.side-body{flex:1;overflow:auto;padding:12px 10px;display:flex;flex-direction:column;gap:14px;min-height:0}
+.side-label{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--text-muted);padding:0 6px 6px}
+.search{display:flex;align-items:center;gap:8px;background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:7px 10px;color:var(--text-muted);font-size:12.5px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:var(--radius-sm);color:var(--text-secondary);font-size:12.5px;width:100%;text-align:left}
+.nav-item:hover{background:var(--bg-surface);color:var(--text-primary)}
+.nav-item.on{background:var(--accent-dim);color:var(--accent);font-weight:600}
+.nav-item .n{margin-left:auto;font-size:11px;color:var(--text-muted)}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg-base)}
+.topbar{height:var(--topbar-h);display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--border-faint);flex-shrink:0}
+.title{font-size:16px;font-weight:700}
+.sub{color:var(--text-secondary);font-size:12px}
+.spacer{flex:1}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:var(--radius-md);background:var(--bg-surface);border:1px solid var(--border-subtle);font-size:12.5px;font-weight:500;color:var(--text-primary)}
+.btn:hover{background:var(--bg-hover)}
+.btn.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:600}
+.btn.primary:hover{background:var(--accent-hover)}
+.btn.icon{padding:7px}
+.seg{display:inline-flex;background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:2px}
+.seg button{padding:5px 11px;border-radius:8px;font-size:12px;color:var(--text-secondary)}
+.seg button.on{background:var(--bg-hover);color:var(--text-primary);font-weight:600}
+.content{flex:1;min-height:0;overflow:auto;padding:16px 20px}
+.custom-scroll{scrollbar-width:thin;scrollbar-color:#333 transparent}
+
+/* posters (placeholders) */
+.poster{border-radius:6px;background:linear-gradient(160deg,var(--c1),var(--c2));display:grid;place-items:center;font-weight:800;color:rgba(255,255,255,.85);flex-shrink:0;font-size:11px}
+.mini-movie{display:flex;align-items:center;gap:10px;padding:6px;border-radius:var(--radius-md);border:1px solid transparent;cursor:grab}
+.mini-movie:hover{background:var(--bg-surface);border-color:var(--border-subtle)}
+.mini-movie .poster{width:30px;height:44px}
+.mini-movie strong{font-size:12.5px;font-weight:600;display:block}
+.mini-movie span{font-size:11px;color:var(--text-muted)}
+
+/* event chips – colour = list colour, so events read like the library */
+.ev{--c:var(--accent);background:color-mix(in srgb,var(--c) 18%,var(--bg-raised));border-left:3px solid var(--c);border-radius:5px;padding:3px 6px;font-size:11px;line-height:1.3;overflow:hidden}
+.ev b{font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev small{color:var(--text-secondary);font-size:10.5px}
+
+/* ── Concept A: month ── */
+.month{border:1px solid var(--border-subtle);border-radius:var(--radius-lg);overflow:hidden;background:var(--bg-raised);display:flex;flex-direction:column;height:100%;min-height:520px}
+.dow,.weeks{display:grid;grid-template-columns:repeat(7,1fr)}
+.dow div{padding:8px 10px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--text-muted);border-bottom:1px solid var(--border-faint)}
+.weeks{flex:1;grid-auto-rows:1fr}
+.day{border-right:1px solid var(--border-faint);border-bottom:1px solid var(--border-faint);padding:6px;display:flex;flex-direction:column;gap:3px;min-height:86px}
+.day:nth-child(7n){border-right:0}
+.day .d{font-size:11.5px;color:var(--text-secondary);width:22px;height:22px;display:grid;place-items:center;border-radius:50%}
+.day.out .d{color:var(--text-muted)}
+.day.today .d{background:var(--accent);color:var(--on-accent);font-weight:700}
+.day.drop{background:var(--accent-dim);outline:1px dashed var(--accent);outline-offset:-3px}
+.split{display:flex;gap:16px;height:100%}
+.split .month{flex:1}
+.panel{width:280px;flex-shrink:0;background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:14px;display:flex;flex-direction:column;gap:12px}
+.panel h3{font-size:13px;font-weight:700}
+.hint{font-size:11.5px;color:var(--text-muted);line-height:1.5}
+
+/* ── Concept B: week ── */
+.week{border:1px solid var(--border-subtle);border-radius:var(--radius-lg);background:var(--bg-raised);overflow:hidden;display:flex;flex-direction:column;height:100%}
+.wk-head{display:grid;grid-template-columns:56px repeat(7,1fr);border-bottom:1px solid var(--border-subtle)}
+.wk-head div{padding:8px 10px;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+.wk-head div b{display:block;font-size:17px;color:var(--text-primary);letter-spacing:0;margin-top:2px}
+.wk-head .today b{color:var(--accent)}
+.wk-scroll{flex:1;overflow:auto;position:relative}
+.wk-grid{display:grid;grid-template-columns:56px repeat(7,1fr);position:relative;height:calc(15 * 52px)}
+.wk-times div{height:52px;font-size:10.5px;color:var(--text-muted);text-align:right;padding:0 8px;transform:translateY(-7px)}
+.wk-col{border-left:1px solid var(--border-faint);position:relative;background-image:linear-gradient(var(--border-faint) 1px,transparent 1px);background-size:100% 52px}
+.wk-col .ev{position:absolute;left:3px;right:3px;padding:6px 8px;font-size:11.5px}
+.wk-col .ev b{white-space:normal}
+.now{position:absolute;left:56px;right:0;height:0;border-top:2px solid var(--red);z-index:2}
+.ghost{outline:1.5px dashed var(--accent);background:var(--accent-dim)!important}
+
+/* ── Concept C: agenda ── */
+.agenda{display:grid;grid-template-columns:1fr 300px;gap:18px}
+.group h4{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--text-muted);font-weight:600;margin:0 0 8px}
+.card{display:flex;gap:14px;background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:12px;margin-bottom:10px}
+.card:hover{border-color:var(--border-mid)}
+.card .poster{width:56px;height:84px;font-size:14px}
+.card .when{width:64px;text-align:center;flex-shrink:0;border-right:1px solid var(--border-faint);padding-right:12px}
+.card .when b{display:block;font-size:22px;line-height:1.1}
+.card .when span{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);font-weight:600}
+.card h5{font-size:14px;font-weight:600;margin-bottom:3px}
+.meta{font-size:12px;color:var(--text-secondary);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pill{font-size:10.5px;padding:2px 8px;border-radius:99px;background:var(--accent-dim);color:var(--accent);font-weight:600}
+.pill.g{background:rgba(52,211,153,.12);color:var(--green)}
+.card .acts{margin-left:auto;display:flex;gap:6px;align-items:flex-start}
+.mini{background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:14px}
+.mini .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;font-size:11.5px;margin-top:8px}
+.mini .grid span{padding:6px 0;border-radius:6px;color:var(--text-secondary);position:relative}
+.mini .grid .h{font-size:10px;color:var(--text-muted);text-transform:uppercase}
+.mini .grid .has::after{content:"";position:absolute;bottom:2px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--accent)}
+.mini .grid .t{background:var(--accent);color:var(--on-accent);font-weight:700}
+
+/* ── Modal ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(2px);display:none;place-items:center;z-index:50}
+.overlay.open{display:grid}
+.modal{width:440px;max-width:94vw;background:var(--bg-raised);border:1px solid var(--border-mid);border-radius:var(--radius-lg);box-shadow:0 24px 60px rgba(0,0,0,.6)}
+.modal header{display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-faint);font-weight:700;font-size:14px}
+.modal header button{margin-left:auto;color:var(--text-muted)}
+.modal .body{padding:16px 18px;display:flex;flex-direction:column;gap:14px}
+.modal footer{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--border-faint)}
+.pick{display:flex;gap:12px;align-items:center;background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:8px}
+.pick .poster{width:38px;height:56px}
+.pick strong{font-size:13.5px;display:block}
+.pick span{font-size:11.5px;color:var(--text-secondary)}
+.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.f label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);font-weight:600;margin-bottom:5px}
+.f .in{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:8px 10px;font-size:12.5px}
+.f .in.calc{color:var(--accent);border-style:dashed}
+.gcal{display:flex;align-items:center;gap:10px;padding:10px;border:1px dashed var(--border-mid);border-radius:var(--radius-md);color:var(--text-muted);font-size:12px}
+.gcal .soon{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:2px 7px;border-radius:99px;background:var(--bg-surface)}
+.view{display:none;flex:1;min-height:0}.view.on{display:flex}
+</style>
+</head>
+<body>
+
+<div class="mock-bar">
+  <b>SCHEDULE — 3 directions</b>
+  <button class="mock-tab on" data-v="a">A · Month + library tray</button>
+  <button class="mock-tab" data-v="b">B · Week timeline</button>
+  <button class="mock-tab" data-v="c">C · Agenda ("Watch plan")</button>
+  <span class="mock-note">Static mockups, Sept 27 2026 = "today". Try “Schedule a watch” and drag-hover in A.</span>
+</div>
+
+<div class="view on" id="v-a"></div>
+<div class="view" id="v-b"></div>
+<div class="view" id="v-c"></div>
+
+<!-- Shared modal -->
+<div class="overlay" id="modal">
+  <div class="modal">
+    <header>Schedule a watch <button onclick="modal(false)" aria-label="Close"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></header>
+    <div class="body">
+      <div class="f"><label>Movie (from your library)</label>
+        <div class="pick"><div class="poster" style="--c1:#e0563a;--c2:#7a1f2b">CE</div>
+          <div><strong>Chennai Express</strong><span>2013 · 2h 21m · <span style="color:var(--star)">★ 7.1</span></span></div>
+          <span style="margin-left:auto;color:var(--text-muted)">Change</span></div></div>
+      <div class="row">
+        <div class="f"><label>Date</label><div class="in">Sat, Oct 10 2026</div></div>
+        <div class="f"><label>Starts</label><div class="in">2:00 PM</div></div>
+        <div class="f"><label>Ends · from runtime</label><div class="in calc">4:21 PM</div></div>
+      </div>
+      <div class="f"><label>Note (optional)</label><div class="in" style="color:var(--text-muted)">Popcorn night with family</div></div>
+      <div class="gcal">
+        <svg class="s" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        Also add to Google Calendar <span class="soon">Step 2</span>
+      </div>
+    </div>
+    <footer><button class="btn" onclick="modal(false)">Cancel</button><button class="btn primary" onclick="modal(false)">Schedule</button></footer>
+  </div>
+</div>
+
+<script>
+const I = {
+  film:'<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 8h4M3 12h4M3 16h4M17 8h4M17 12h4M17 16h4"/></svg>',
+  compass:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>',
+  cal:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+  set:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  out:'<svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
+  plus:'<svg class="s" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  l:'<svg class="s" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>',
+  r:'<svg class="s" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>',
+  search:'<svg class="s" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
+  clock:'<svg class="s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  more:'<svg class="s" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>',
+  chk:'<svg class="s" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></svg>',
+};
+const M = { // library movies (runtime in minutes comes from the Movie model)
+  ce:{t:'Chennai Express',s:'CE',rt:141,c:['#e0563a','#7a1f2b'],y:2013},
+  in:{t:'Inception',s:'IN',rt:148,c:['#3b82f6','#1e2a5a'],y:2010},
+  is:{t:'Interstellar',s:'IS',rt:169,c:['#f59e0b','#3a2308'],y:2014},
+  pa:{t:'Parasite',s:'PA',rt:132,c:['#34d399','#0e3b2e'],y:2019},
+  du:{t:'Dune: Part Two',s:'D2',rt:166,c:['#d6a25e','#4a2d12'],y:2024},
+};
+const LIST = {watch:'#a394f5',fav:'#fbbf24',fam:'#34d399'};
+const dur = m => `${Math.floor(m/60)}h ${m%60}m`;
+const fmt = mins => {let h=Math.floor(mins/60),m=mins%60,ap=h>=12?'PM':'AM';h=h%12||12;return `${h}:${String(m).padStart(2,'0')} ${ap}`};
+const poster = (k,w,h,fs) => `<div class="poster" style="--c1:${M[k].c[0]};--c2:${M[k].c[1]};width:${w}px;height:${h}px;${fs?`font-size:${fs}px`:''}">${M[k].s}</div>`;
+// events: date (Oct 2026), start minutes, movie, list colour
+const EV = [
+  {d:3, st:19*60+30, m:'is', c:LIST.fav},
+  {d:7, st:20*60,    m:'in', c:LIST.watch},
+  {d:9, st:21*60,    m:'pa', c:LIST.watch},
+  {d:10,st:14*60,    m:'ce', c:LIST.fam},
+  {d:16,st:20*60,    m:'pa', c:LIST.watch},
+  {d:24,st:15*60,    m:'du', c:LIST.fav},
+];
+
+function shell(active, sideHtml, top, body){
+  return `<div class="app">
+  <aside class="rail"><div class="top"><div class="avatar">CT</div><hr>
+    <button class="rail-btn">${I.film}</button><button class="rail-btn">${I.compass}</button><button class="rail-btn on" title="Schedule">${I.cal}</button></div>
+    <div class="bot"><button class="rail-btn">${I.set}</button><button class="rail-btn">${I.out}</button></div></aside>
+  <aside class="sidebar"><div class="brand"><i>▶</i>CineTrack</div><div class="side-body custom-scroll">${sideHtml}</div></aside>
+  <main class="main"><div class="topbar">${top}</div><div class="content custom-scroll">${body}</div></main></div>`;
+}
+const navSide = (extra='') => `
+  <div><div class="side-label">Schedule</div>
+    <button class="nav-item on">${I.cal} Calendar <span class="n">6</span></button>
+    <button class="nav-item">${I.clock} Upcoming <span class="n">4</span></button>
+    <button class="nav-item">${I.chk} Watched on plan <span class="n">12</span></button></div>
+  <div><div class="side-label">Show lists</div>
+    <button class="nav-item"><span class="dot" style="background:${LIST.watch}"></span> Watchlist</button>
+    <button class="nav-item"><span class="dot" style="background:${LIST.fav}"></span> Favourites</button>
+    <button class="nav-item"><span class="dot" style="background:${LIST.fam}"></span> Family nights</button></div>${extra}`;
+const scheduleBtn = `<button class="btn primary" onclick="modal(true)">${I.plus} Schedule a watch</button>`;
+
+/* ── A ── */
+function monthGrid(){
+  const first=4; // Oct 1 2026 is Thursday (index 4)
+  let cells='';
+  const prev=[27,28,29,30];
+  for(let i=0;i<35;i++){
+    let n=i-first+1, out=false;
+    if(n<1){n=prev[i]?prev[i]:30-(first-1-i);out=true}
+    if(i-first+1>31){n=i-first+1-31;out=true}
+    const real=!out?n:null;
+    const evs=EV.filter(e=>e.d===real).map(e=>`<div class="ev" style="--c:${e.c}"><b>${M[e.m].t}</b><small>${fmt(e.st)}</small></div>`).join('');
+    const today=false;
+    cells+=`<div class="day${out?' out':''}${real===10?' drop':''}"><span class="d">${n}</span>${evs}</div>`;
+  }
+  return `<div class="month"><div class="dow">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div>${d}</div>`).join('')}</div><div class="weeks">${cells}</div></div>`;
+}
+const tray = Object.keys(M).map(k=>`<div class="mini-movie" draggable="true">${poster(k,30,44)}<div><strong>${M[k].t}</strong><span>${M[k].y} · ${dur(M[k].rt)}</span></div></div>`).join('');
+document.getElementById('v-a').innerHTML = shell('a',
+  `<div class="search">${I.search} Search library…</div>` + navSide(),
+  `<span class="title">Schedule</span><span class="sub">October 2026</span><span class="spacer"></span>
+   <div class="seg"><button class="on">Month</button><button>Week</button><button>Agenda</button></div>
+   <button class="btn icon">${I.l}</button><button class="btn">Today</button><button class="btn icon">${I.r}</button>${scheduleBtn}`,
+  `<div class="split"><div style="flex:1;display:flex;min-width:0">${monthGrid()}</div>
+    <aside class="panel"><h3>Your library</h3><div class="search">${I.search} Find a movie…</div>
+      <div class="custom-scroll" style="overflow:auto;display:flex;flex-direction:column;gap:2px">${tray}</div>
+      <p class="hint">Drag a movie onto a day to schedule it. The end time is filled in from its runtime — highlighted day shows a drop target.</p></aside></div>`);
+
+/* ── B ── */
+const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const PX=52, START=8; // 8 AM start, 52px per hour
+function weekCols(){
+  let cols='';
+  for(let i=0;i<7;i++){
+    const date=4+i; // Oct 4..10
+    let evs=EV.filter(e=>e.d===date).map(e=>{
+      const top=(e.st/60-START)*PX, h=M[e.m].rt/60*PX;
+      const ghost=e.d===10?' ghost':'';
+      return `<div class="ev${ghost}" style="--c:${e.c};top:${top}px;height:${h}px"><b>${M[e.m].t}</b><small>${fmt(e.st)} – ${fmt(e.st+M[e.m].rt)}</small>${h>80?`<br><small>${dur(M[e.m].rt)}</small>`:''}</div>`;
+    }).join('');
+    cols+=`<div class="wk-col">${evs}</div>`;
+  }
+  const times=Array.from({length:15},(_,i)=>`<div>${i===0?'':fmt((START+i)*60).replace(':00','')}</div>`).join('');
+  return `<div class="wk-grid"><div class="wk-times">${times}</div>${cols}</div>`;
+}
+document.getElementById('v-b').innerHTML = shell('b',
+  `<div class="search">${I.search} Search library…</div>` + navSide(`
+   <div><div class="side-label">Week at a glance</div>
+     <div class="mini" style="padding:10px;font-size:12px;color:var(--text-secondary);line-height:1.7"><b style="color:var(--text-primary)">3 movies</b> planned<br>6h 21m of watch time<br>Next: Inception · Wed 8:00 PM</div></div>`),
+  `<span class="title">Schedule</span><span class="sub">Oct 4 – 10, 2026</span><span class="spacer"></span>
+   <div class="seg"><button>Month</button><button class="on">Week</button><button>Agenda</button></div>
+   <button class="btn icon">${I.l}</button><button class="btn">Today</button><button class="btn icon">${I.r}</button>${scheduleBtn}`,
+  `<div class="week" style="height:calc(100vh - 56px - 42px - 32px)">
+    <div class="wk-head"><div></div>${dayNames.map((d,i)=>`<div>${d}<b>${4+i}</b></div>`).join('')}</div>
+    <div class="wk-scroll custom-scroll">${weekCols()}</div></div>`);
+
+/* ── C ── */
+function card(e,extra=''){
+  const m=M[e.m];
+  const dt=new Date(2026,9,e.d);
+  return `<div class="card"><div class="when"><span>${dayNames[dt.getDay()]}</span><b>${e.d}</b><span style="color:var(--text-muted)">Oct</span></div>
+    ${poster(e.m,56,84,14)}
+    <div><h5>${m.t}</h5>
+      <div class="meta">${I.clock} ${fmt(e.st)} – ${fmt(e.st+m.rt)} <span>·</span> ${dur(m.rt)}</div>
+      <div class="meta" style="margin-top:8px"><span class="pill" style="background:color-mix(in srgb,${e.c} 16%,transparent);color:${e.c}">● ${e.c===LIST.fav?'Favourites':e.c===LIST.fam?'Family nights':'Watchlist'}</span>${extra}</div></div>
+    <div class="acts"><button class="btn">${I.chk} Mark watched</button><button class="btn icon">${I.more}</button></div></div>`;
+}
+const up=[...EV].filter(e=>e.d>=7).sort((a,b)=>a.d-b.d);
+const miniGrid=()=>{
+  let h=['S','M','T','W','T','F','S'].map(d=>`<span class="h">${d}</span>`).join('');
+  h+='<span></span>'.repeat(4);
+  for(let d=1;d<=31;d++)h+=`<span class="${EV.some(e=>e.d===d)?'has':''}${d===10?' t':''}">${d}</span>`;
+  return h;
+};
+document.getElementById('v-c').innerHTML = shell('c',
+  `<div class="search">${I.search} Search library…</div>` + navSide(),
+  `<span class="title">Watch plan</span><span class="sub">Upcoming</span><span class="spacer"></span>
+   <div class="seg"><button>Month</button><button>Week</button><button class="on">Agenda</button></div>${scheduleBtn}`,
+  `<div class="agenda"><div>
+     <div class="group"><h4>This week</h4>${card(up[0],'<span class="pill g">In 3 days</span>')}${card(up[1])}</div>
+     <div class="group"><h4>Next week</h4>${card(up[2],'<span class="pill">Next Saturday</span>')}</div>
+     <div class="group"><h4>Later in October</h4>${card(up[3])}${card(up[4])}</div></div>
+   <aside><div class="mini"><div style="display:flex;align-items:center"><b style="font-size:13px">October 2026</b><span class="spacer"></span>${I.l}${I.r}</div><div class="grid">${miniGrid()}</div></div>
+     <div class="mini" style="margin-top:12px"><b style="font-size:13px">Quick schedule</b><p class="hint" style="margin:6px 0 10px">Pick a movie, we suggest the next free weekend slot.</p>
+       ${['ce','du'].map(k=>`<div class="mini-movie" onclick="modal(true)">${poster(k,30,44)}<div><strong>${M[k].t}</strong><span>${dur(M[k].rt)} · Sat 2:00 PM free</span></div></div>`).join('')}</div></aside></div>`);
+
+/* switcher + modal */
+document.querySelectorAll('.mock-tab').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.mock-tab').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+b.dataset.v));
+});
+function modal(o){document.getElementById('modal').classList.toggle('open',o)}
+document.getElementById('modal').onclick=e=>{if(e.target.id==='modal')modal(false)};
+</script>
+</body>
+</html>

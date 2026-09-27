@@ -985,38 +985,6 @@ body {
 }
 
 /* Card sizes */
-.topbar__sizes {
-  display: flex;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-faint);
-  border-radius: var(--radius-md);
-  padding: 3px;
-  gap: 2px;
-}
-
-.topbar__size-btn {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.12s;
-}
-
-.topbar__size-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-.topbar__size-btn.is-active {
-  background: var(--accent);
-  color: #000;
-}
-
 /* Add Movie button */
 .topbar__add-btn {
   display: flex;
@@ -2269,6 +2237,192 @@ select {
 .sidebar__dropdown-item--fav:hover {
   color: var(--star);
   background: rgba(245, 197, 24, 0.1);
+}
+
+/* ==========================================================================
+   TRASH MODAL
+   ========================================================================== */
+.trash-modal {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7);
+  animation: fadeIn 0.15s ease forwards;
+  overflow: hidden;
+}
+
+.trash-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-faint);
+  background: var(--bg-deep);
+  flex-shrink: 0;
+}
+
+.trash-modal__title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.trash-modal__subtitle {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.trash-modal__close {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.trash-modal__close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.trash-modal__error {
+  margin: 12px 20px 0;
+}
+
+.trash-modal__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trash-modal__empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.trash-modal__empty-text {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.trash-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+}
+
+.trash-row:hover {
+  background: var(--bg-hover);
+}
+
+.trash-row__thumb {
+  position: relative;
+  flex-shrink: 0;
+  width: 32px;
+  height: 46px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--bg-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.trash-row__thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.trash-row__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.trash-row__info strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trash-row__info span {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trash-row__days {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.trash-row__actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.trash-row__btn {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.trash-row__btn:hover:not(:disabled) {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.trash-row__btn--danger:hover:not(:disabled) {
+  color: #f87171;
+}
+
+.trash-row__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* ==========================================================================

@@ -4,7 +4,9 @@ import MovieList from './components/MovieList';
 import MovieDetailPage from './components/MovieDetailPage';
 import MovieSearchModal from './components/MovieSearchModal';
 import Discover from './components/Discover';
+import Schedule from './components/Schedule';
 import NewListModal from './components/NewListModal';
+import TrashModal from './components/TrashModal';
 import ActivityRail from './components/ActivityRail';
 import SettingsModal from './components/SettingsModal';
 import { DEFAULT_SHORTCUTS, matchesShortcut } from './lib/shortcuts';
@@ -65,6 +67,7 @@ export default function App() {
   // Modals
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isNewListOpen, setIsNewListOpen] = useState(false);
+  const [isTrashOpen, setIsTrashOpen] = useState(false);
 
   // Loading & Network state
   const [isLoadingLists, setIsLoadingLists] = useState(true);
@@ -546,6 +549,13 @@ export default function App() {
       // Nothing else fires while Settings is open
       if (isSettingsOpen) return;
 
+      // Toggle Trash (default Ctrl+Shift+Backspace)
+      if (matchesShortcut(e, shortcuts.toggleTrash)) {
+        e.preventDefault();
+        setIsTrashOpen((prev) => !prev);
+        return;
+      }
+
       // Toggle left sidebar (default Alt+B)
       if (matchesShortcut(e, shortcuts.toggleSidebar)) {
         e.preventDefault();
@@ -571,6 +581,11 @@ export default function App() {
       if (matchesShortcut(e, shortcuts.goDiscover)) {
         e.preventDefault();
         selectSection('discover');
+        return;
+      }
+      if (matchesShortcut(e, shortcuts.goSchedule)) {
+        e.preventDefault();
+        selectSection('schedule');
         return;
       }
 
@@ -662,6 +677,7 @@ export default function App() {
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={handleToggleSidebar}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenTrash={() => setIsTrashOpen(true)}
         shortcuts={shortcuts}
         totalMoviesCount={totalAllCount}
       />
@@ -694,7 +710,6 @@ export default function App() {
               onOpenSearch={() => setIsSearchOpen(true)}
               isLoading={isLoadingMovies}
               cardSize={prefs.cardSize}
-              onCardSizeChange={(size) => handlePrefsChange({ cardSize: size })}
               shortcuts={shortcuts}
               onRemoveItem={handleRemoveItem}
             />
@@ -720,6 +735,18 @@ export default function App() {
         clearHistorySignal={clearDiscoverSignal}
         detailNode={activeSection === 'discover' ? detailPage : null}
       />
+
+      {/* Schedule section: mounted only while active, since its calendar and modal have no
+          cross-section state worth keeping warm (unlike Discover's rounds/shortlist bag). */}
+      {activeSection === 'schedule' && (
+        <Schedule
+          visible
+          items={allMovies}
+          lists={lists}
+          isSidebarOpen={isSidebarOpen}
+          prefs={prefs}
+        />
+      )}
 
       {/* Settings Modal */}
       <SettingsModal
@@ -748,6 +775,13 @@ export default function App() {
         isOpen={isNewListOpen}
         onClose={() => setIsNewListOpen(false)}
         onCreate={handleCreateList}
+      />
+
+      {/* Trash */}
+      <TrashModal
+        isOpen={isTrashOpen}
+        onClose={() => setIsTrashOpen(false)}
+        onChanged={fetchLists}
       />
 
       {/* Toast */}
