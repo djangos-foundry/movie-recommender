@@ -413,6 +413,35 @@ def get_recommendations(count=5, list_id=None, filters=None, rng=None, user=None
     }
 
 
+def _filter_locally(movies, genres, criteria):
+    """Apply genre / excluded-genre / year / language / rating rules to a
+    ready-made list of movies (the discover call does this itself on TMDB)."""
+    wanted = {g.lower() for g in genres}
+    banned = {g.lower() for g in criteria.get("exclude_genres") or []}
+    kept = []
+    for movie in movies:
+        have = {g.lower() for g in movie.get("genres", [])}
+        if wanted and not wanted & have:
+            continue
+        if banned & have:
+            continue
+        year = (movie.get("release_date") or "")[:4]
+        if year.isdigit():
+            if criteria.get("year_min") and int(year) < int(criteria["year_min"]):
+                continue
+            if criteria.get("year_max") and int(year) > int(criteria["year_max"]):
+                continue
+        elif criteria.get("year_min") or criteria.get("year_max"):
+            continue
+        language = criteria.get("language")
+        if language and movie.get("original_language") != language:
+            continue
+        if criteria.get("min_rating") and movie.get("vote_average", 0) < float(criteria["min_rating"]):
+            continue
+        kept.append(movie)
+    return kept
+
+
 def get_web_recommendations(count=5, filters=None, rng=None, user=None):
     """
     Open-vocabulary web search: pull straight from TMDB using the given
@@ -442,7 +471,91 @@ def get_web_recommendations(count=5, filters=None, rng=None, user=None):
         "min_rating": filters.get("min_rating"),
         "cast_ids": filters.get("cast_ids") or [],
         "crew_ids": filters.get("crew_ids") or [],
+        "company_ids": filters.get("company_ids") or [],
+        "keyword_ids": filters.get("keyword_ids") or [],
+        "exclude_genres": _clean_list(filters.get("exclude_genres")),
     }
+
+    # A named franchise ("insidious") is a fixed set of movies, not a filter:
+    # list its films in release order instead of sampling at random.
+    collection_ids = filters.get("collection_ids") or []
+    if collection_ids:
+        franchise = {}
+        for collection_id in collection_ids:
+            for movie in tmdb_service.get_collection_movies(collection_id):
+                year = (movie.get("release_date") or "")[:4]
+                if year.isdigit():
+                    if criteria["year_min"] and int(year) < int(criteria["year_min"]):
+                        continue
+                    if criteria["year_max"] and int(year) > int(criteria["year_max"]):
+                        continue
+                if movie["tmdb_id"] not in library_tmdb_ids:
+                    franchise.setdefault(movie["tmdb_id"], movie)
+        listed = sorted(franchise.values(), key=lambda m: m.get("release_date") or "9999")
+        if listed:
+            return {"results": listed[:count], "degraded": False, "pool_size": len(listed), "message": ""}
+        return {
+            "results": [], "degraded": False, "pool_size": 0,
+            "message": "You already own everything in that franchise, or TMDB lists nothing for it.",
+        }
+
+    # "movies like X": TMDB's own recommendations for that title. Sampled so
+    # asking again shows different ones; the movie itself and anything the
+    # user owns are skipped; a year filter still applies.
+    similar = filters.get("similar_to")
+    if similar:
+        related = {}
+        for movie in tmdb_service.get_similar_movies(similar["id"]):
+            year = (movie.get("release_date") or "")[:4]
+            if year.isdigit():
+                if criteria["year_min"] and int(year) < int(criteria["year_min"]):
+                    continue
+                if criteria["year_max"] and int(year) > int(criteria["year_max"]):
+                    continue
+            if movie["tmdb_id"] != similar["id"] and movie["tmdb_id"] not in library_tmdb_ids:
+                related.setdefault(movie["tmdb_id"], movie)
+        if not related:
+            return {
+                "results": [], "degraded": False, "pool_size": 0,
+                "message": f"TMDB has no recommendations for {similar['title']} that you don't already own.",
+            }
+        # TMDB lists these most relevant first and quality falls off quickly,
+        # so vary the picks only within the top of the list
+        candidates = list(related.values())[:15]
+        picks = rng.sample(candidates, min(count, len(candidates)))
+        return {"results": picks, "degraded": False, "pool_size": len(candidates), "message": ""}
+
+    # Sources TMDB can't filter itself - one of its ready-made lists (trending,
+    # now playing, ...) or a director's own directing credits. They are fetched
+    # whole and filtered here with the same rules the discover call applies.
+    list_kind = filters.get("list_kind")
+    director_ids = filters.get("director_ids") or []
+    if list_kind or director_ids:
+        if list_kind:
+            source = tmdb_service.get_movie_list(list_kind)
+        else:
+            source = [
+                m for person_id in director_ids
+                for m in tmdb_service.get_director_movies(person_id)
+                if m["vote_count"] >= 10
+            ]
+        kept = {
+            m["tmdb_id"]: m for m in _filter_locally(source, genres, criteria)
+            if m["tmdb_id"] not in library_tmdb_ids
+        }
+        candidates = list(kept.values())
+        if list_kind:
+            candidates = candidates[:20]  # TMDB ranks these; stay near the top
+        if not candidates:
+            return {
+                "results": [], "degraded": not source, "pool_size": 0,
+                "message": (
+                    "Could not reach TMDB just now. Check your connection and try again."
+                    if not source else "Nothing there matched that. Try loosening it."
+                ),
+            }
+        picks = rng.sample(candidates, min(count, len(candidates)))
+        return {"results": picks, "degraded": False, "pool_size": len(candidates), "message": ""}
 
     # A narrow, specific ask (a language + a near year, say) has a small
     # real candidate pool - a high popularity/vote-count bar would often

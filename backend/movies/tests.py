@@ -4,7 +4,11 @@ from django.contrib.auth import get_user_model
 from django.test import override_settings
 from rest_framework.test import APITestCase, APIClient
 
+from django.test import SimpleTestCase
+
 from .models import MovieList, GoogleAccount
+from .services import chat
+from .services.tmdb import tmdb_service
 
 
 def google_info(sub, email='a@example.com', name='Ann Example'):
@@ -71,3 +75,161 @@ class AccountsTests(APITestCase):
         c.post('/api/auth/logout/')
         self.assertIsNone(c.get('/api/auth/me/').json()['user'])
         self.assertEqual(c.get('/api/lists/').json(), [])
+
+
+class EntityResolutionTests(SimpleTestCase):
+    """Leftover words are resolved through TMDB's own searches (mocked here)."""
+
+    def run_parse(self, message, collections=(), keywords=(), companies=(), people=(), has_movies=True):
+        def named(items):
+            return lambda q: [{"id": i, "name": n} for i, n in items]
+
+        with patch.object(tmdb_service, 'search_collection', side_effect=named(collections)), \
+             patch.object(tmdb_service, 'search_keyword', side_effect=named(keywords)), \
+             patch.object(tmdb_service, 'search_company', side_effect=named(companies)), \
+             patch.object(tmdb_service, 'search_person',
+                          return_value=[{"id": i, "name": n, "department": "Acting"} for i, n in people]), \
+             patch.object(tmdb_service, 'has_movies', return_value=has_movies):
+            return chat.parse_open_vocabulary(message)
+
+    def test_franchise_found_by_name(self):
+        filters, _, chips = self.run_parse('insidious', collections=[(228446, 'Insidious Collection')])
+        self.assertEqual(filters['collection_ids'], [228446])
+        self.assertEqual(chips, ['Insidious Collection'])
+
+    def test_franchise_outranks_person_with_same_name(self):
+        filters, _, _ = self.run_parse(
+            'john wick', collections=[(404609, 'John Wick Collection')], people=[(1, 'John Wick')])
+        self.assertEqual(filters['collection_ids'], [404609])
+        self.assertEqual(filters['cast_ids'], [])
+
+    def test_keyword_must_match_exactly(self):
+        filters, _, _ = self.run_parse('zombie movies', keywords=[(1, 'zombie sex'), (12377, 'zombie')])
+        self.assertEqual(filters['keyword_ids'], [12377])
+
+    def test_empty_keyword_falls_through_to_studio(self):
+        # a "marvel" keyword with no movies must not hide Marvel Studios
+        def has(with_keywords=None, with_companies=None):
+            return with_companies is not None
+
+        with patch.object(tmdb_service, 'search_collection', return_value=[]), \
+             patch.object(tmdb_service, 'search_keyword', return_value=[{"id": 9, "name": "marvel"}]), \
+             patch.object(tmdb_service, 'search_company', return_value=[{"id": 420, "name": "Marvel Studios"}]), \
+             patch.object(tmdb_service, 'has_movies', side_effect=has):
+            filters, _, chips = chat.parse_open_vocabulary('marvel movies')
+        self.assertEqual(filters['company_ids'], [420])
+        self.assertEqual(filters['keyword_ids'], [])
+        self.assertEqual(chips, ['Marvel Studios'])
+
+    def test_unrelated_search_hit_is_ignored(self):
+        filters, _, chips = self.run_parse('xyzzyplugh movies', keywords=[(5, 'something else')])
+        self.assertEqual(chips, [])
+        self.assertEqual(filters['keyword_ids'], [])
+
+    def test_stray_words_do_not_match_a_random_person(self):
+        filters, _, chips = self.run_parse('thriller but not horror', people=[(7, 'Philip Blake')])
+        self.assertEqual(filters['cast_ids'], [])
+        self.assertNotIn('Philip Blake', chips)
+
+    def test_decade_is_not_looked_up_as_a_keyword(self):
+        filters, _, _ = self.run_parse('comedy from the 2010s', keywords=[(3, '2010s')])
+        self.assertEqual(filters['keyword_ids'], [])
+        self.assertEqual((filters['year_min'], filters['year_max']), (2010, 2019))
+
+    def test_connector_words_stay_inside_a_name(self):
+        self.assertEqual(chat._leftover_phrases('lord of the rings'), ['lord of the rings'])
+
+
+class MoviesLikeTests(SimpleTestCase):
+    def search(self, *titles):
+        results = [{"id": i, "tmdb_id": i, "title": t, "original_title": t, "vote_count": v} for i, t, v in titles]
+        return patch.object(tmdb_service, 'search_movies', return_value={"results": results})
+
+    def test_like_clause_is_extracted_and_removed(self):
+        with self.search((157336, 'Interstellar', 30000)):
+            movie, rest = chat._split_similar('movies like Interstellar from the 2010s')
+        self.assertEqual(movie['id'], 157336)
+        self.assertNotIn('interstellar', rest.lower())
+        self.assertIn('2010s', rest)
+
+    def test_remake_resolves_to_the_best_known_title(self):
+        with self.search((1, 'Dune', 900), (2, 'Dune', 9000)):
+            movie, _ = chat._split_similar('movies like Dune')
+        self.assertEqual(movie['id'], 2)
+
+    def test_everyday_phrase_is_not_a_movie(self):
+        with self.search((9, 'Watching', 12)):  # barely-voted title is ignored
+            movie, rest = chat._split_similar('feel like watching something funny')
+        self.assertIsNone(movie)
+        self.assertEqual(rest, 'feel like watching something funny')
+
+    def test_title_words_are_not_also_read_as_a_studio_or_keyword(self):
+        with self.search((245891, 'John Wick', 8000)), \
+             patch.object(tmdb_service, 'search_collection', return_value=[{"id": 404609, "name": "John Wick Collection"}]):
+            filters, _, chips = chat.parse_open_vocabulary('movies like John Wick')
+        self.assertEqual(filters['similar_to']['id'], 245891)
+        self.assertEqual(filters['collection_ids'], [])
+        self.assertEqual(chips, ['Like John Wick'])
+
+
+class WebAskFeatureTests(APITestCase):
+    """Negation, TMDB lists, directors and the never-go-silent response."""
+
+    def parse(self, message, **patches):
+        with patch.object(tmdb_service, 'search_collection', return_value=[]), \
+             patch.object(tmdb_service, 'search_keyword', return_value=[]), \
+             patch.object(tmdb_service, 'search_company', return_value=[]), \
+             patch.object(tmdb_service, 'search_person', return_value=patches.get('people', [])):
+            return chat.parse_open_vocabulary(message)
+
+    def test_negation_excludes_instead_of_including(self):
+        filters, _, chips = self.parse('thriller but not horror')
+        self.assertEqual(filters['genres'], ['Thriller'])
+        self.assertEqual(filters['exclude_genres'], ['Horror'])
+        self.assertEqual(chips, ['Thriller', 'Not Horror'])
+
+    def test_negated_mood_word_and_fillers(self):
+        filters, _, _ = self.parse('nothing too scary')
+        self.assertEqual(filters['exclude_genres'], ['Horror'])
+        self.assertEqual(filters['genres'], [])
+
+    def test_list_phrases(self):
+        cases = {
+            'trending this week': 'trending_week', 'trending today': 'trending_day',
+            'in theatres now': 'now_playing', 'coming soon': 'upcoming', 'popular right now': 'popular',
+        }
+        for text, kind in cases.items():
+            self.assertEqual(self.parse(text)[0]['list_kind'], kind, text)
+
+    def test_list_words_are_not_unmatched_leftovers(self):
+        self.assertEqual(self.parse('trending horror movies')[0]['unmatched'], [])
+
+    def test_director_uses_directing_credits(self):
+        people = [{"id": 525, "name": "Christopher Nolan", "department": "Directing", "popularity": 9.2}]
+        filters, _, _ = self.parse('Christopher Nolan movies', people=people)
+        self.assertEqual(filters['director_ids'], [525])
+        self.assertEqual(filters['crew_ids'], [])
+
+    def test_lone_surname_needs_a_well_known_person(self):
+        known = [{"id": 138, "name": "Quentin Tarantino", "department": "Directing", "popularity": 6.9}]
+        obscure = [{"id": 9, "name": "Time Winters", "department": "Acting", "popularity": 1.4}]
+        self.assertEqual(self.parse('tarantino', people=known)[0]['director_ids'], [138])
+        self.assertEqual(self.parse('time', people=obscure)[0]['cast_ids'], [])
+
+    def test_unrecognised_text_is_reported_not_answered_with_random_movies(self):
+        with patch.object(chat, 'parse_open_vocabulary',
+                          return_value=({"unmatched": ["xyzzy"]}, 'x', [])), \
+             patch('movies.views.get_web_recommendations') as draw:
+            res = APIClient().post('/api/chat/', {'message': 'xyzzy movies'}, format='json').json()
+        draw.assert_not_called()
+        self.assertEqual(res['results'], [])
+        self.assertIn('xyzzy', res['message'])
+        self.assertEqual(res['unmatched'], ['xyzzy'])
+
+    def test_random_requests_still_draw(self):
+        with patch.object(chat, 'parse_open_vocabulary', return_value=({"unmatched": []}, 'x', [])), \
+             patch('movies.views.parse_open_vocabulary', return_value=({"unmatched": []}, 'x', [])), \
+             patch('movies.views.get_web_recommendations',
+                   return_value={"results": [{"title": "A"}], "message": ""}) as draw:
+            APIClient().post('/api/chat/', {'message': 'surprise me'}, format='json')
+        draw.assert_called_once()

@@ -18,7 +18,7 @@ import {
   getFilterOptions,
   languageLabel,
   movieYear,
-  parseLibraryAsk,
+  analyzeLibraryAsk,
   toBackendFilters,
 } from '../lib/discoverEngine';
 
@@ -240,7 +240,17 @@ export default function Discover({
     setIsDrawing(true);
     try {
       if (source === 'library') {
-        const parsed = parseLibraryAsk(text, options);
+        const { filters: parsed, unmatched } = analyzeLibraryAsk(text, options);
+        const unknownWords = unmatched.join(', ');
+        // Nothing understood: say so instead of drawing random movies, and
+        // leave the current filters and seen history alone
+        if (activeFilterCount(parsed) === 0 && unmatched.length) {
+          setMessage({
+            text: `I didn't recognise "${unknownWords}". Try a genre, list, year, actor, director or part of a title.`,
+            tone: 'info',
+          });
+          return;
+        }
         setFilters(parsed);
         setStore((s) => ({ ...s, seen: [] }));
         const newPool = applyFilters(records, parsed);
@@ -255,6 +265,9 @@ export default function Discover({
             askText: text,
             understood: describeLibraryFilters(parsed, options),
           });
+          if (unmatched.length) {
+            setMessage({ text: `I didn't recognise "${unknownWords}" - showing the rest of what you asked.`, tone: 'info' });
+          }
         }
       } else {
         const res = await sendChatMessage(text, [], null, count);
@@ -268,6 +281,12 @@ export default function Discover({
             askText: text,
             understood: res.understood || [],
           });
+          if ((res.unmatched || []).length) {
+            setMessage({
+              text: `I didn't recognise "${res.unmatched.join(', ')}" - showing the rest of what you asked.`,
+              tone: 'info',
+            });
+          }
         }
       }
       setAskInput('');

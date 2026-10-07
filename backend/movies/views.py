@@ -22,7 +22,7 @@ from .serializers import (
 )
 from .services.tmdb import tmdb_service, format_poster_url, format_backdrop_url, normalize_genres
 from .services.recommender import get_recommendations, get_filter_options, get_web_recommendations
-from .services.chat import parse_open_vocabulary
+from .services.chat import parse_open_vocabulary, _RANDOM_RE
 
 
 class MovieListIndexView(ListCreateAPIView):
@@ -411,9 +411,25 @@ class ChatRecommendView(APIView):
         count = max(1, min(count, 20))
 
         filters, reply, understood = parse_open_vocabulary(message)
+        unmatched = filters.get("unmatched") or []
+
+        # Nothing in the sentence was understood: say so instead of drawing
+        # random movies that look like an answer (unless they asked for random)
+        if not understood and not _RANDOM_RE.search(message):
+            tip = "Try a genre, year, studio, actor, director, a franchise, or 'like <movie>'."
+            note = (f'I didn\'t recognise "{", ".join(unmatched)}". {tip}' if unmatched
+                    else f"I couldn't find anything to search for in that. {tip}")
+            return Response({
+                "results": [], "degraded": False, "pool_size": 0, "message": note,
+                "reply": note, "filters": filters, "understood": [], "unmatched": unmatched,
+            })
+
         data = get_web_recommendations(count=count, filters=filters, user=request.user)
 
-        return Response({**data, "reply": reply, "filters": filters, "understood": understood})
+        return Response({
+            **data, "reply": reply, "filters": filters,
+            "understood": understood, "unmatched": unmatched,
+        })
 
 
 class SeedDataView(APIView):

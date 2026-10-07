@@ -540,6 +540,230 @@ class TMDBService:
             })
         return results
 
+    def _search_names(self, path, query, limit=5):
+        """Shared body of the id+name lookups below; [] on no key or any failure."""
+        clean_query = (query or "").strip()
+        if not clean_query or not self.api_key:
+            return []
+        try:
+            response = requests.get(
+                f"{self.BASE_URL}{path}",
+                params={"api_key": self.api_key, "query": clean_query},
+                timeout=4,
+            )
+            if response.status_code != 200:
+                logger.warning("TMDB %s returned %s.", path, response.status_code)
+                return []
+            data = response.json()
+        except Exception as e:
+            logger.warning("TMDB %s failed (%s).", path, e)
+            return []
+        return [
+            {"id": item.get("id"), "name": item.get("name", "")}
+            for item in data.get("results", [])[:limit]
+            if item.get("id") and item.get("name")
+        ]
+
+    def search_company(self, query):
+        """Studios / production companies ("studio ghibli", "marvel", "a24")."""
+        return self._search_names("/search/company", query)
+
+    def search_keyword(self, query):
+        """TMDB topic keywords ("anime", "zombie", "heist", "time travel")."""
+        return self._search_names("/search/keyword", query)
+
+    def search_collection(self, query):
+        """Franchises ("insidious collection", "john wick collection")."""
+        return self._search_names("/search/collection", query)
+
+    @staticmethod
+    def _format_list_item(item):
+        """One TMDB list/credit entry in the discover result shape."""
+        return {
+            "id": item.get("id"),
+            "tmdb_id": item.get("id"),
+            "title": item.get("title", ""),
+            "original_title": item.get("original_title", ""),
+            "overview": item.get("overview", ""),
+            "poster_path": format_poster_url(item.get("poster_path")),
+            "backdrop_path": format_backdrop_url(item.get("backdrop_path")),
+            "release_date": item.get("release_date", ""),
+            "vote_average": float(item.get("vote_average") or 0.0),
+            "vote_count": int(item.get("vote_count") or 0),
+            "popularity": float(item.get("popularity") or 0.0),
+            "genres": normalize_genres(None, item.get("genre_ids", [])),
+            "original_language": item.get("original_language", ""),
+            "runtime": 0,
+        }
+
+    # kind -> (TMDB path, whether it is paged by "day"/"week")
+    MOVIE_LISTS = {
+        "trending_day": "/trending/movie/day",
+        "trending_week": "/trending/movie/week",
+        "now_playing": "/movie/now_playing",
+        "upcoming": "/movie/upcoming",
+        "popular": "/movie/popular",
+    }
+
+    def get_movie_list(self, kind, pages=2):
+        """
+        One of TMDB's ready-made lists (trending today / this week, now playing,
+        upcoming, popular), in TMDB's own order. [] with no key or on failure.
+        """
+        path = self.MOVIE_LISTS.get(kind)
+        if not path or not self.api_key:
+            return []
+        movies = []
+        for page in range(1, pages + 1):
+            try:
+                response = requests.get(
+                    f"{self.BASE_URL}{path}",
+                    params={"api_key": self.api_key, "page": page},
+                    timeout=5,
+                )
+                if response.status_code != 200:
+                    break
+                data = response.json()
+            except Exception as e:
+                logger.warning("TMDB list %s failed (%s).", kind, e)
+                break
+            movies.extend(self._format_list_item(i) for i in data.get("results", []) if i.get("id"))
+            if page >= data.get("total_pages", 1):
+                break
+        return movies
+
+    def get_director_movies(self, person_id):
+        """
+        Movies this person actually DIRECTED. TMDB's with_crew filter matches
+        any crew role (producer, writer, ...), so a director's own credits
+        list is the only accurate source.
+        """
+        if not self.api_key or not person_id:
+            return []
+        try:
+            response = requests.get(
+                f"{self.BASE_URL}/person/{int(person_id)}/movie_credits",
+                params={"api_key": self.api_key},
+                timeout=5,
+            )
+            if response.status_code != 200:
+                return []
+            crew = response.json().get("crew", [])
+        except Exception as e:
+            logger.warning("TMDB credits lookup failed (%s).", e)
+            return []
+        seen, movies = set(), []
+        for item in crew:
+            if item.get("job") == "Director" and item.get("id") and item["id"] not in seen:
+                seen.add(item["id"])
+                movies.append(self._format_list_item(item))
+        return movies
+
+    def get_similar_movies(self, movie_id, pages=2):
+        """
+        Movies people connect with `movie_id`, via TMDB's own recommendations
+        (falling back to its "similar" list), most relevant first, in the
+        discover result shape.
+        """
+        if not self.api_key or not movie_id:
+            return []
+
+        def fetch(kind):
+            items = []
+            for page in range(1, pages + 1):
+                try:
+                    response = requests.get(
+                        f"{self.BASE_URL}/movie/{int(movie_id)}/{kind}",
+                        params={"api_key": self.api_key, "page": page},
+                        timeout=5,
+                    )
+                    if response.status_code != 200:
+                        break
+                    data = response.json()
+                except Exception as e:
+                    logger.warning("TMDB %s lookup failed (%s).", kind, e)
+                    break
+                items.extend(data.get("results", []))
+                if page >= data.get("total_pages", 1):
+                    break
+            return items
+
+        items = fetch("recommendations") or fetch("similar")
+        return [
+            {
+                "id": item.get("id"),
+                "tmdb_id": item.get("id"),
+                "title": item.get("title", ""),
+                "original_title": item.get("original_title", ""),
+                "overview": item.get("overview", ""),
+                "poster_path": format_poster_url(item.get("poster_path")),
+                "backdrop_path": format_backdrop_url(item.get("backdrop_path")),
+                "release_date": item.get("release_date", ""),
+                "vote_average": float(item.get("vote_average", 0.0)),
+                "vote_count": int(item.get("vote_count", 0)),
+                "popularity": float(item.get("popularity", 0.0)),
+                "genres": normalize_genres(None, item.get("genre_ids", [])),
+                "original_language": item.get("original_language", ""),
+                "runtime": 0,
+            }
+            for item in items if item.get("id")
+        ]
+
+    def has_movies(self, with_keywords=None, with_companies=None):
+        """True when TMDB lists at least one movie for that keyword / studio id."""
+        if not self.api_key:
+            return False
+        # Same vote floor the Web draw uses, so "has movies" means "would show some"
+        params = {"api_key": self.api_key, "include_adult": False, "vote_count.gte": 10}
+        if with_keywords:
+            params["with_keywords"] = with_keywords
+        if with_companies:
+            params["with_companies"] = with_companies
+        try:
+            response = requests.get(f"{self.BASE_URL}/discover/movie", params=params, timeout=4)
+            return response.status_code == 200 and response.json().get("total_results", 0) > 0
+        except Exception as e:
+            logger.warning("TMDB has_movies check failed (%s).", e)
+            return False
+
+    def get_collection_movies(self, collection_id):
+        """Every movie in a franchise, oldest first, in the discover result shape."""
+        if not self.api_key or not collection_id:
+            return []
+        try:
+            response = requests.get(
+                f"{self.BASE_URL}/collection/{int(collection_id)}",
+                params={"api_key": self.api_key},
+                timeout=5,
+            )
+            if response.status_code != 200:
+                return []
+            parts = response.json().get("parts", [])
+        except Exception as e:
+            logger.warning("TMDB collection lookup failed (%s).", e)
+            return []
+
+        movies = []
+        for item in parts:
+            movies.append({
+                "id": item.get("id"),
+                "tmdb_id": item.get("id"),
+                "title": item.get("title", ""),
+                "original_title": item.get("original_title", ""),
+                "overview": item.get("overview", ""),
+                "poster_path": format_poster_url(item.get("poster_path")),
+                "backdrop_path": format_backdrop_url(item.get("backdrop_path")),
+                "release_date": item.get("release_date", ""),
+                "vote_average": float(item.get("vote_average", 0.0)),
+                "vote_count": int(item.get("vote_count", 0)),
+                "popularity": float(item.get("popularity", 0.0)),
+                "genres": normalize_genres(None, item.get("genre_ids", [])),
+                "original_language": item.get("original_language", ""),
+                "runtime": 0,
+            })
+        movies.sort(key=lambda m: m["release_date"] or "9999")
+        return movies
+
     def get_movie_details(self, tmdb_id):
         """Fetch movie details by TMDB ID from API or fallback mock data."""
         try:
@@ -726,6 +950,20 @@ class TMDBService:
             crew_ids = [c for c in (criteria.get("crew_ids") or []) if c]
             if crew_ids:
                 params["with_crew"] = "|".join(str(c) for c in crew_ids)
+
+            excluded = [GENRE_NAME_TO_ID.get(str(n).strip().lower()) for n in criteria.get("exclude_genres") or []]
+            excluded = [g for g in excluded if g]
+            if excluded:
+                params["without_genres"] = "|".join(str(g) for g in excluded)
+
+            company_ids = [c for c in (criteria.get("company_ids") or []) if c]
+            if company_ids:
+                params["with_companies"] = "|".join(str(c) for c in company_ids)
+
+            # "," = AND: "time travel heist" should need both topics
+            keyword_ids = [k for k in (criteria.get("keyword_ids") or []) if k]
+            if keyword_ids:
+                params["with_keywords"] = ",".join(str(k) for k in keyword_ids)
 
             # Transient connection resets are common; one cheap retry recovers most
             last_error = None

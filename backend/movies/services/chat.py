@@ -24,6 +24,7 @@ Two parsers implement that step:
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from django.conf import settings
 
@@ -98,9 +99,18 @@ _NAME_STOPWORDS = {
     "highly", "rated", "best", "top", "acclaimed", "great", "masterpiece",
     "classic", "early", "late", "before", "after", "between",
     "directed", "director", "directing", "by", "starring", "stars",
-    "featuring", "cast", "like",
+    "featuring", "cast", "like", "but", "not", "no", "without",
+    "except", "excluding", "avoid", "nothing", "any", "too", "very", "really",
+    # words the list phrases below ("trending now", "in theatres") claim
+    "trending", "popular", "upcoming", "playing", "now", "today", "week",
+    "theatre", "theatres", "theater", "theaters", "cinema", "cinemas",
+    "coming", "soon", "new", "release", "releases", "released", "releasing",
+    "right", "hot", "just", "next", "month", "showing", "everyone's",
+    "what's", "whats", "tomorrow", "yet",
+    "surprise", "random", "whatever", "anything", "dealer's", "choice",
 }
 _NAME_STOPWORDS |= set(LANGUAGE_WORDS)
+_NAME_STOPWORDS |= set(MOOD_GENRES)
 for _genre_name in GENRE_MAP.values():
     _NAME_STOPWORDS |= {w.lower() for w in _genre_name.split()}
 
@@ -403,6 +413,155 @@ def _extract_name_candidates(message):
     return phrases[:2]  # cap TMDB lookups per message
 
 
+_STUDIO_NOISE = {
+    "studio", "studios", "pictures", "picture", "productions", "production",
+    "entertainment", "films", "film", "animation", "company", "inc", "ltd",
+    "group", "international", "media", "the",
+}
+_FRANCHISE_NOISE = {"collection", "series", "saga", "trilogy", "franchise", "anthology", "the"}
+_CONNECTORS = {"of", "the", "and", "in", "a", "an", "to", "for", "on"}
+
+
+def _tokens(text, noise=()):
+    return [t for t in re.findall(r"[a-z0-9]+", (text or "").lower()) if t not in noise]
+
+
+def _leftover_phrases(message):
+    """
+    Runs of words the rule-based vocabulary did not claim, as candidate names
+    for TMDB's own searches. Short words and numbers are noise ("s" from
+    "90s"), and only the first few runs are tried to bound the TMDB calls.
+    """
+    words = re.findall(r"[A-Za-z0-9'][A-Za-z0-9'-]*", message or "")  # keeps "sci-fi" whole
+    groups, current, pending = [], [], []
+    for w in words:
+        lw = w.lower()
+        # "of the" inside a run ("lord of the rings") stays; at the edges it goes
+        if lw in _CONNECTORS and current:
+            pending.append(w)
+            continue
+        if lw in _NAME_STOPWORDS or len(w) < 3 or re.fullmatch(r"\d+s?", lw):
+            if current:
+                groups.append(current)
+            current, pending = [], []
+            continue
+        current.extend(pending)
+        pending = []
+        current.append(w)
+    if current:
+        groups.append(current)
+    return [" ".join(g) for g in groups][:3]
+
+
+def _resolve_entity(phrase):
+    """
+    Ask TMDB what a leftover phrase *is*: a franchise, a topic keyword or a
+    studio. A hit only counts when TMDB's name matches the phrase exactly
+    (ignoring words like "Studios" / "Collection"), so a stray word can never
+    turn into an unrelated filter. Checked in the order franchise > keyword >
+    studio, which settles words that exist as more than one kind.
+
+    Returns (kind, [ids], label) or None.
+    """
+    if not _tokens(phrase):
+        return None
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = {
+            "collection": pool.submit(tmdb_service.search_collection, phrase),
+            "keyword": pool.submit(tmdb_service.search_keyword, phrase),
+            "company": pool.submit(tmdb_service.search_company, phrase),
+        }
+        found = {kind: future.result() for kind, future in futures.items()}
+
+    noise = {"collection": _FRANCHISE_NOISE, "keyword": (), "company": _STUDIO_NOISE}
+    for kind in ("collection", "keyword", "company"):
+        target = _tokens(phrase, noise[kind]) or _tokens(phrase)
+        for item in found[kind]:
+            if _tokens(item["name"], noise[kind]) != target:
+                continue
+            # Some keywords/studios exist on TMDB with no movies attached
+            # (a "marvel" keyword next to the Marvel Studios company); skip
+            # those and keep looking.
+            if kind == "keyword" and not tmdb_service.has_movies(with_keywords=item["id"]):
+                continue
+            if kind == "company":
+                if not tmdb_service.has_movies(with_companies=item["id"]):
+                    continue
+                # TMDB often lists one studio under several ids ("A24" twice);
+                # OR them all so we don't pick the wrong one.
+                ids = [m["id"] for m in found["company"]
+                       if _tokens(m["name"], _STUDIO_NOISE) == target]
+                return kind, ids, item["name"]
+            return kind, [item["id"]], item["name"]
+    return None
+
+
+def _person_matches(phrase, person):
+    """Every word of the phrase must appear in the person's name."""
+    name_tokens = set(_tokens(person.get("name")))
+    phrase_tokens = _tokens(phrase)
+    return bool(phrase_tokens) and all(t in name_tokens for t in phrase_tokens)
+
+
+_SIMILAR_RE = re.compile(r"\b(?:like|similar to)\s+(.+)$", re.IGNORECASE)
+
+
+def _find_movie(phrase):
+    """
+    A movie whose title is exactly `phrase` (ignoring a leading "the"). When a
+    title has remakes the best-known one wins, and a barely-voted-on title
+    never counts, so ordinary words ("watching") don't turn into movies.
+    """
+    want = _tokens(phrase, {"the"})
+    if not want:
+        return None
+    best = None
+    for item in tmdb_service.search_movies(phrase).get("results", []):
+        titles = (item.get("title"), item.get("original_title"))
+        if any(_tokens(t, {"the"}) == want for t in titles if t):
+            if int(item.get("vote_count") or 0) >= 50 and (
+                best is None or item["vote_count"] > best["vote_count"]
+            ):
+                best = item
+    if best:
+        return {"id": best["tmdb_id"] if "tmdb_id" in best else best["id"], "title": best["title"],
+                "vote_count": best["vote_count"]}
+    return None
+
+
+def _split_similar(message):
+    """
+    Pull a "like <movie title>" / "similar to <title>" clause out of a
+    sentence. Returns (movie_or_None, message_without_the_clause); anything
+    after the title ("... from the 2010s") stays in the message for the other
+    rules. Trailing words are trimmed one at a time until a real title matches.
+    """
+    found = _SIMILAR_RE.search(message or "")
+    if not found:
+        return None, message
+    words = re.sub(r"[?!.,]+$", "", found.group(1).strip()).split()
+    for n in range(min(len(words), 6), 0, -1):
+        movie = _find_movie(" ".join(words[:n]))
+        if movie:
+            rest = f"{message[:found.start()]} {' '.join(words[n:])}".strip()
+            return movie, rest
+    return None, message
+
+
+def _match_person(phrase):
+    """
+    The person a phrase names, or None. Every word of the phrase must appear in
+    the person's name (so "but not" can't match a random actor). A lone word
+    ("nolan") is only trusted for well-known people, most popular first.
+    """
+    people = [p for p in tmdb_service.search_person(phrase) if _person_matches(phrase, p)]
+    if len(phrase.split()) == 1:
+        people = [p for p in people if p.get("popularity", 0) >= 5]  # Nolan 9.2, Tarantino 6.9, "Time Winters" 1.4
+        people.sort(key=lambda p: p["popularity"], reverse=True)
+    return people[0] if people else None
+
+
 def _describe_filters(filters, matched_people):
     """
     One short label per matched piece of the request - a genre stays its
@@ -441,6 +600,58 @@ def _open_vocab_reply(chips):
     return "Looking for " + ", ".join(chips) + " on the web."
 
 
+_NEGATORS = r"(?:not|no|without|except|excluding|avoid|nothing|non)"
+_FILLERS = r"(?:(?:any|too|very|so|much|really|a|an|the)\s+)*"
+
+
+def _extract_negations(text, genres_lower):
+    """
+    Genres the sentence rules out: "thriller but not horror", "no romance",
+    "without comedy", "nothing too scary". Returns display names. Looks at
+    what follows a negator, skipping filler words, and accepts any genre name
+    or mood word (scary -> Horror) so it uses the same vocabulary as the
+    positive side.
+    """
+    terms = {name: name for name in genres_lower}
+    terms.update({word: genre for word, genre in MOOD_GENRES.items()})
+    ordered = sorted(terms, key=len, reverse=True)  # "science fiction" before "science"
+    excluded = []
+    for match in re.finditer(rf"\b{_NEGATORS}[\s-]+{_FILLERS}", text):
+        rest = text[match.end():]
+        for term in ordered:
+            if re.match(rf"{re.escape(term)}\b", rest):
+                genre = genres_lower.get(terms[term])
+                if genre and genre not in excluded:
+                    excluded.append(genre)
+                break
+    return excluded
+
+
+_LIST_PATTERNS = [
+    (r"\btrending\b", None),
+    (r"\b(now playing|playing now|in (?:the )?(?:theat(?:er|re)s?|cinemas?)|showing now|new releases?|just released)\b",
+     ("now_playing", "In theatres now")),
+    (r"\b(upcoming|coming soon|releasing soon|yet to release)\b", ("upcoming", "Coming soon")),
+    (r"\b(popular|everyone'?s watching|hot right now|what'?s hot)\b", ("popular", "Popular now")),
+]
+
+
+def _detect_list_kind(text):
+    """TMDB's ready-made lists: "trending this week", "in theatres now",
+    "coming soon", "popular right now". Returns (kind, chip label) or (None, None)."""
+    for pattern, result in _LIST_PATTERNS:
+        if re.search(pattern, text):
+            if result is None:  # trending: today vs this week
+                if re.search(r"\b(today|tonight|right now)\b", text):
+                    return "trending_day", "Trending today"
+                return "trending_week", "Trending this week"
+            return result
+    return None, None
+
+
+_RANDOM_RE = re.compile(r"\b(surprise|random|anything|whatever|any movie|dealer'?s choice)\b", re.IGNORECASE)
+
+
 def parse_open_vocabulary(message):
     """
     Turn a free-form sentence into TMDB discover criteria - open vocabulary,
@@ -461,6 +672,9 @@ def parse_open_vocabulary(message):
     one per matched genre/person/language/date/runtime/rating - for the
     Discover UI's "Understood as" chips.
     """
+    # "movies like Interstellar": resolve the title first and take that clause
+    # out, so its words aren't also read as a studio, keyword or person.
+    similar, message = _split_similar(message)
     text = (message or "").lower()
 
     genres = []
@@ -500,18 +714,53 @@ def parse_open_vocabulary(message):
     # People: the one open-ended field. A leftover multi-word span gets
     # checked against TMDB's own person search; "directed"/"director"
     # anywhere in the sentence steers a match to crew instead of cast.
-    cast_ids, crew_ids, matched_people = [], [], []
+    cast_ids, crew_ids, director_ids, matched_people = [], [], [], []
+    company_ids, keyword_ids, collection_ids, unmatched = [], [], [], []
+    if similar:
+        matched_people.append(f"Like {similar['title']}")
+
+    # "not horror": rule the genre out instead of asking for it
+    exclude_genres = _extract_negations(text, genres_lower)
+    genres = [g for g in genres if g not in exclude_genres]
+    matched_people.extend(f"Not {g}" for g in exclude_genres)
+
+    list_kind, list_label = _detect_list_kind(text)
+    if list_label:
+        matched_people.append(list_label)
+
     wants_director = bool(re.search(r"\bdirect", text))
-    for phrase in _extract_name_candidates(message):
-        results = tmdb_service.search_person(phrase)
-        if not results:
+    for phrase in _leftover_phrases(message):
+        entity = _resolve_entity(phrase)
+        # A franchise outranks a person who happens to share its name
+        # ("John Wick", "Harry Potter" are people on TMDB too)
+        if entity and entity[0] == "collection":
+            collection_ids.extend(entity[1])
+            matched_people.append(entity[2])
             continue
-        person = results[0]
-        matched_people.append(person["name"])
-        if wants_director or person.get("department") == "Directing":
-            crew_ids.append(person["id"])
+
+        # A multi-word phrase is most likely a full name; a single word is
+        # tried as a person only after a topic or studio has been ruled out
+        # ("zombie" is a topic, "nolan" is a surname).
+        multi_word = len(phrase.split()) >= 2
+        person = _match_person(phrase) if multi_word else None
+        if not person and not entity and not multi_word:
+            person = _match_person(phrase)
+        if person:
+            matched_people.append(person["name"])
+            # Directors come from their own directing credits, not TMDB's
+            # any-crew-role filter (which also returns movies they produced)
+            if wants_director or person.get("department") == "Directing":
+                director_ids.append(person["id"])
+            else:
+                cast_ids.append(person["id"])
+            continue
+
+        if entity:
+            kind, entity_id, label = entity
+            matched_people.append(label)
+            {"keyword": keyword_ids, "company": company_ids}[kind].extend(entity_id)
         else:
-            cast_ids.append(person["id"])
+            unmatched.append(phrase)
 
     filters = {
         "genres": genres,
@@ -522,6 +771,14 @@ def parse_open_vocabulary(message):
         "min_rating": min_rating,
         "cast_ids": cast_ids,
         "crew_ids": crew_ids,
+        "company_ids": company_ids,
+        "keyword_ids": keyword_ids,
+        "collection_ids": collection_ids,
+        "similar_to": {"id": similar["id"], "title": similar["title"]} if similar else None,
+        "exclude_genres": exclude_genres,
+        "list_kind": list_kind,
+        "director_ids": director_ids,
+        "unmatched": unmatched,  # phrases no vocabulary or TMDB lookup claimed
     }
     understood = _describe_filters(filters, matched_people)
     return filters, _open_vocab_reply(understood), understood
