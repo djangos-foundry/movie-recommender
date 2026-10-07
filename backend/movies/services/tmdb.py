@@ -497,6 +497,49 @@ class TMDBService:
         # Fallback to rich mock search
         return self._mock_search(clean_query, page=page)
 
+    def search_person(self, query):
+        """
+        Resolve a name to a TMDB person id via /search/person.
+
+        Used by the chat parser's open-vocabulary path to turn a name typed
+        in a sentence (e.g. "leonardo dicaprio") into a person id it can
+        hand to discover_movies' with_cast/with_crew - not limited to names
+        that already appear in the user's own library. TMDB's own search is
+        doing the fuzzy matching here, so casing and minor typos are its
+        problem, not ours.
+
+        Returns an empty list with no API key configured or on any failure;
+        the caller already treats "no match" as "ignore that part of the
+        sentence", so this degrades gracefully rather than raising.
+        """
+        clean_query = (query or "").strip()
+        if not clean_query or not self.api_key:
+            return []
+
+        try:
+            response = requests.get(
+                f"{self.BASE_URL}/search/person",
+                params={"api_key": self.api_key, "query": clean_query, "include_adult": False},
+                timeout=4,
+            )
+            if response.status_code != 200:
+                logger.warning("TMDB person search returned %s.", response.status_code)
+                return []
+            data = response.json()
+        except Exception as e:
+            logger.warning("TMDB person search failed (%s).", e)
+            return []
+
+        results = []
+        for item in data.get("results", [])[:5]:
+            results.append({
+                "id": item.get("id"),
+                "name": item.get("name", ""),
+                "department": item.get("known_for_department", ""),
+                "popularity": float(item.get("popularity") or 0.0),
+            })
+        return results
+
     def get_movie_details(self, tmdb_id):
         """Fetch movie details by TMDB ID from API or fallback mock data."""
         try:

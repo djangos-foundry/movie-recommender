@@ -1,17 +1,31 @@
 // API Client for Movie Recommendation & Tracking
 // Base URL pointing to Django backend
-const API_BASE = 'http://localhost:8000/api';
+// Same hostname as the page, so the session cookie is sent (localhost and
+// 127.0.0.1 are different sites to the browser).
+const API_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+const API_BASE = `http://${API_HOST}:8000/api`;
+
+let csrfToken = '';
+
+function readCsrfCookie() {
+  const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : '';
+}
 
 /**
  * Helper to handle fetch requests with timeout and helpful fallback error handling
  */
 async function fetchJson(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
+  const method = (options.method || 'GET').toUpperCase();
   const config = {
     ...options,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json',
+      // Django rotates the CSRF cookie when a session starts, so prefer the cookie
+      ...(method === 'GET' ? {} : { 'X-CSRFToken': readCsrfCookie() || csrfToken }),
       ...(options.headers || {}),
     },
   };
@@ -169,10 +183,16 @@ export async function sendChatMessage(message, history = [], listId = null, coun
 }
 
 // 7. Seed sample data
-export async function seedSampleData() {
-  return await fetchJson('/seed/', {
-    method: 'POST',
-  });
+// Concurrent calls share one request: two simultaneous first-visit seeds would
+// each start their own guest session (and collide on the SQLite write lock).
+let seedInFlight = null;
+export function seedSampleData() {
+  if (!seedInFlight) {
+    seedInFlight = fetchJson('/seed/', { method: 'POST' }).finally(() => {
+      seedInFlight = null;
+    });
+  }
+  return seedInFlight;
 }
 
 // 8. Schedule (calendar of planned watch sessions)
@@ -231,4 +251,24 @@ export async function permanentlyDeleteTrashEntry(kind, id) {
   return await fetchJson(`/trash/${kind}/${id}/`, {
     method: 'DELETE',
   });
+}
+
+// 10. Accounts (Google sign-in)
+export async function getMe() {
+  const data = await fetchJson('/auth/me/');
+  csrfToken = data.csrf_token || csrfToken;
+  return data; // { user: null | {name, email, picture}, google_client_id }
+}
+
+export async function loginWithGoogle(credential) {
+  const data = await fetchJson('/auth/google/', {
+    method: 'POST',
+    body: JSON.stringify({ credential }),
+  });
+  csrfToken = data.csrf_token || csrfToken;
+  return data;
+}
+
+export async function logout() {
+  return await fetchJson('/auth/logout/', { method: 'POST' });
 }

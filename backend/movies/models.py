@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
@@ -18,6 +19,10 @@ class MovieList(models.Model):
     color = models.CharField(max_length=50, default='#f5c518')
     icon = models.CharField(max_length=50, default='Film')
     is_favourite = models.BooleanField(default=False)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.CASCADE, related_name='movie_lists',
+    )
     order = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
@@ -83,6 +88,10 @@ class ScheduledWatch(models.Model):
     notes = models.TextField(blank=True, default='')
     is_watched = models.BooleanField(default=False)
     google_event_id = models.CharField(max_length=255, blank=True, default='')
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.CASCADE, related_name='scheduled_watches',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -121,3 +130,19 @@ class MovieListItem(models.Model):
 
     def __str__(self):
         return f"{self.movie.title} in {self.list.name} ({self.status})"
+
+
+class GoogleAccount(models.Model):
+    """Links a Django user to a Google identity. `sub` is Google's stable,
+    permanent id for the person (email can change, `sub` never does)."""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='google_account',
+    )
+    sub = models.CharField(max_length=255, unique=True)
+    email = models.EmailField(blank=True, default='')
+    name = models.CharField(max_length=255, blank=True, default='')
+    picture = models.URLField(max_length=500, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.email or self.sub

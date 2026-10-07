@@ -223,6 +223,23 @@
   color: var(--dz-faint);
 }
 
+/* Icon-only mode toggle in the composer: same 48px height as the count box
+   and the Recommend button so the whole row lines up */
+.dz-segs--icons {
+  flex-shrink: 0;
+  height: 48px;
+  box-sizing: border-box;
+  border-radius: 12px;
+}
+
+.dz-segs--icons .dz-seg {
+  flex: none;
+  width: 42px;
+  height: 100%;
+  padding: 0;
+  border-radius: 9px;
+}
+
 .dz-seg:hover {
   color: var(--dz-text);
 }
@@ -676,7 +693,8 @@
 }
 
 .dz-composer--dock {
-  margin: 12px 20px 20px;
+  width: min(900px, 100% - 40px);
+  margin: 12px auto 20px;
 }
 
 .dz-composer--center {
@@ -776,6 +794,45 @@ input.dz-step__input {
 .dz-step__arrow:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+.dz-ask {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--dz-line);
+  background: var(--dz-bg);
+}
+
+.dz-ask:focus-within {
+  border-color: var(--dz-accent);
+}
+
+.dz-ask__icon {
+  flex-shrink: 0;
+  color: var(--dz-accent);
+}
+
+/* Specificity beats index.css's global input[type="text"] rule, which would
+   otherwise paint its own --bg-surface over this and break the seamless bar */
+.dz-ask .dz-ask__input {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--dz-text);
+  font-size: 14px;
+}
+
+.dz-ask__input::placeholder {
+  color: var(--dz-faint);
 }
 
 /* ── Right filter panel ───────────────────────────────────────────────── */

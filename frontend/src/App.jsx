@@ -23,6 +23,9 @@ import {
   removeListItem,
   seedSampleData,
   getTMDBMovie,
+  getMe,
+  loginWithGoogle,
+  logout,
 } from './api/client';
 
 import { AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
@@ -138,6 +141,38 @@ export default function App() {
       );
     } finally {
       setIsLoadingLists(false);
+    }
+  }, []);
+
+  // Who is signed in (null = guest). Guests can use the app; signing in with
+  // Google keeps their lists on the account.
+  const [authUser, setAuthUser] = useState(null);
+  const [googleClientId, setGoogleClientId] = useState('');
+  useEffect(() => {
+    getMe()
+      .then((me) => {
+        setAuthUser(me.user);
+        setGoogleClientId(me.google_client_id || '');
+      })
+      .catch((err) => console.warn('Could not load account:', err));
+  }, []);
+
+  // Reload afterwards so every screen refetches data for the new account.
+  const handleGoogleCredential = useCallback(async (credential) => {
+    try {
+      await loginWithGoogle(credential);
+      window.location.reload();
+    } catch (err) {
+      showToast(err.message || 'Google sign-in failed', 'error');
+    }
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    try {
+      await logout();
+      window.location.reload();
+    } catch (err) {
+      showToast(err.message || 'Sign out failed', 'error');
     }
   }, []);
 
@@ -680,6 +715,10 @@ export default function App() {
         onOpenTrash={() => setIsTrashOpen(true)}
         shortcuts={shortcuts}
         totalMoviesCount={totalAllCount}
+        user={authUser}
+        googleClientId={googleClientId}
+        onGoogleCredential={handleGoogleCredential}
+        onSignOut={handleSignOut}
       />
 
       {/* Library section */}
@@ -719,6 +758,8 @@ export default function App() {
 
       {/* Discover section: stays mounted while hidden so the bag, rounds and filters survive a trip to Library */}
       <Discover
+        key={authUser?.email || 'guest'}
+        userKey={authUser?.email || 'guest'}
         visible={activeSection === 'discover'}
         items={allMovies}
         lists={lists}

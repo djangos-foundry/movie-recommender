@@ -189,6 +189,182 @@ export function clampCount(value, fallback = 5) {
   return Math.min(MAX_DRAW, Math.max(MIN_DRAW, n));
 }
 
+// ── Library "Ask": parse a sentence into the same filters shape the filter
+// panel already produces, so the existing applyFilters/drawFromBag pipeline
+// above can run on it unchanged. See docs/tasks/discover-chat-nlp.md.
+//
+// Deliberately clamped to the user's OWN vocabulary (their lists, genres,
+// directors, actors, languages) - the mirror image of the Web/Ask parser on
+// the backend, which is deliberately open. No dependencies, no ML model:
+// dictionary lookup plus a handful of regexes, run client-side against data
+// already loaded in the browser.
+
+const ASK_STATUS_PHRASES = [
+  [/\b(haven'?t watched|not watched yet|still (need|have) to watch|unwatched|to watch)\b/, 'plan_to_watch'],
+  [/\b(already watched|watched already|seen (it|them) already|finished watching)\b/, 'completed'],
+  [/\b(currently watching|watching now|still watching|in progress)\b/, 'watching'],
+  [/\b(dropped|gave up on|stopped watching)\b/, 'dropped'],
+];
+
+const ASK_MOODS = {
+  scary: 'horror', spooky: 'horror', creepy: 'horror',
+  funny: 'comedy', hilarious: 'comedy', laugh: 'comedy',
+  romantic: 'romance', love: 'romance',
+  'sci-fi': 'science fiction', scifi: 'science fiction', space: 'science fiction', futuristic: 'science fiction',
+  thrilling: 'thriller', tense: 'thriller', suspense: 'thriller',
+  animated: 'animation', cartoon: 'animation',
+  gangster: 'crime', heist: 'crime',
+};
+
+function slug(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function hasWord(text, phrase) {
+  if (!phrase) return false;
+  const esc = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`\\b${esc}\\b`, 'i').test(text);
+}
+
+/** Literal years, decades and relative-date phrases -> { yearMin, yearMax }. */
+function parseAskYearRange(text) {
+  let yearMin = null;
+  let yearMax = null;
+
+  const decade = text.match(/\b(19|20)(\d0)s\b/);
+  if (decade) {
+    const base = Number(decade[1] + decade[2]);
+    if (/\blate\b/.test(text)) { yearMin = base + 5; yearMax = base + 9; }
+    else if (/\bearly\b/.test(text)) { yearMin = base; yearMax = base + 4; }
+    else { yearMin = base; yearMax = base + 9; }
+  }
+
+  const before = text.match(/\bbefore (\d{4})\b/);
+  if (before) yearMax = Number(before[1]) - 1;
+  const after = text.match(/\bafter (\d{4})\b/);
+  if (after) yearMin = Number(after[1]) + 1;
+
+  const between = text.match(/\bbetween (\d{4}) and (\d{4})\b/);
+  if (between) {
+    const a = Number(between[1]);
+    const b = Number(between[2]);
+    yearMin = Math.min(a, b);
+    yearMax = Math.max(a, b);
+  }
+
+  // A bare year is either the one date named, or a second endpoint next to
+  // a decade phrase - either way fold it into the min/max found so far.
+  const literalYears = [...text.matchAll(/\b(19|20)\d{2}\b/g)].map((m) => Number(m[0]));
+  for (const y of literalYears) {
+    yearMin = yearMin === null ? y : Math.min(yearMin, y);
+    yearMax = yearMax === null ? y : Math.max(yearMax, y);
+  }
+
+  return { yearMin, yearMax };
+}
+
+/**
+ * Parse a Library-source "Ask" sentence into the EMPTY_FILTERS shape.
+ * `options` is this library's own getFilterOptions() output, so every
+ * matched value is guaranteed to exist for this user.
+ */
+export function parseLibraryAsk(message, options) {
+  const raw = String(message || '');
+  const text = raw.toLowerCase();
+  const slugText = slug(raw);
+  const filters = { ...EMPTY_FILTERS };
+
+  // Lists - the user's own, matched by normalized substring so punctuation
+  // and spacing differences ("rom-com" vs. a list named "Rom Com") still
+  // match. The longest matching name wins, so a short list name can't
+  // swallow a sentence meant for a more specific one.
+  let bestList = null;
+  for (const l of options.lists || []) {
+    const s = slug(l.name);
+    if (s && slugText.includes(s) && (!bestList || s.length > bestList.s.length)) {
+      bestList = { id: l.id, s };
+    }
+  }
+  if (bestList) filters.lists = [String(bestList.id)];
+
+  for (const [re, statusValue] of ASK_STATUS_PHRASES) {
+    if (re.test(text)) { filters.statuses = [statusValue]; break; }
+  }
+
+  // Genres - exact names from the library, plus mood words mapped onto them
+  const genreNames = (options.genres || []).map((g) => g.value);
+  const foundGenres = new Set(genreNames.filter((name) => hasWord(text, name.toLowerCase())));
+  const ownedLower = new Map(genreNames.map((n) => [n.toLowerCase(), n]));
+  for (const [word, genre] of Object.entries(ASK_MOODS)) {
+    if (hasWord(text, word) && ownedLower.has(genre)) foundGenres.add(ownedLower.get(genre));
+  }
+  filters.genres = [...foundGenres];
+
+  filters.directors = (options.directors || []).map((d) => d.value).filter((v) => hasWord(text, v.toLowerCase()));
+  filters.actors = (options.actors || []).map((a) => a.value).filter((v) => hasWord(text, v.toLowerCase()));
+  filters.languages = (options.languages || [])
+    .map((l) => l.value)
+    .filter((code) => hasWord(text, code.toLowerCase()) || hasWord(text, languageLabel(code).toLowerCase()));
+
+  const hours = text.match(/\b(?:under|less than) (?:an? |two |three )?(\d+)?\s*(?:hours?|hrs?)\b/);
+  const minutes = text.match(/\b(?:under|less than) (\d+)\s*(?:minutes?|mins?)\b/);
+  if (hours) {
+    const n = hours[1] ? Number(hours[1]) : (text.includes('two') ? 2 : 1);
+    filters.runtimeMax = n * 60;
+  } else if (minutes) {
+    filters.runtimeMax = Number(minutes[1]);
+  } else if (/\b(short|quick|brief)\b/.test(text)) {
+    filters.runtimeMax = 100;
+  }
+
+  if (/\b(masterpiece|classic)\b/.test(text)) filters.minRating = 8.0;
+  else if (/\b(highly[- ]rated|best|top[- ]rated|acclaimed|great)\b/.test(text)) filters.minRating = 7.5;
+
+  const { yearMin, yearMax } = parseAskYearRange(text);
+  filters.yearMin = yearMin;
+  filters.yearMax = yearMax;
+
+  return filters;
+}
+
+/**
+ * One short label per matched piece of a Library "Ask" query - the
+ * "Understood as" chips shown under a round, mirroring what the Web/Ask
+ * backend returns (services/chat.py _describe_filters), so both sources
+ * show the same kind of readable breakdown of what was searched for.
+ */
+export function describeLibraryFilters(filters, options) {
+  const chips = [];
+  filters.statuses.forEach((s) => chips.push(STATUS_LABELS[s] || s));
+  filters.genres.forEach((g) => chips.push(g));
+  filters.lists.forEach((id) => {
+    const name = options.lists.find((l) => String(l.id) === id)?.name;
+    if (name) chips.push(name);
+  });
+  filters.directors.forEach((d) => chips.push(d));
+  filters.actors.forEach((a) => chips.push(a));
+  filters.languages.forEach((l) => chips.push(languageLabel(l)));
+  if (filters.yearMin !== null || filters.yearMax !== null) {
+    chips.push(
+      filters.yearMin !== null && filters.yearMax !== null && filters.yearMin !== filters.yearMax
+        ? `${filters.yearMin}-${filters.yearMax}`
+        : String(filters.yearMin ?? filters.yearMax),
+    );
+  }
+  if (filters.runtimeMax !== null) chips.push(`Under ${filters.runtimeMax} min`);
+  if (filters.minRating !== null) chips.push(`Rated ${filters.minRating}+`);
+
+  // A list can share its name with a genre ("Adventure" the list, "Adventure"
+  // the genre) - dedupe so that doesn't show as a literal repeated chip.
+  const seen = new Set();
+  return chips.filter((c) => {
+    const key = c.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /** Map the UI filters onto the query the backend recommender understands. */
 export function toBackendFilters(filters) {
   const out = {

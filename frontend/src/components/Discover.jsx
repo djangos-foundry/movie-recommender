@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Shuffle, SlidersHorizontal, ChevronUp, ChevronDown, X, Globe, Loader2 } from 'lucide-react';
+import { Shuffle, SlidersHorizontal, ChevronUp, ChevronDown, X, Globe, Loader2, Sparkles, Send } from 'lucide-react';
 import '../discover.css';
 import DiscoverSidebar from './discover/DiscoverSidebar';
 import DiscoverFilters from './discover/DiscoverFilters';
 import DiscoverCard from './discover/DiscoverCard';
-import { getRecommendations } from '../api/client';
+import { getRecommendations, sendChatMessage } from '../api/client';
 import { loadJson, saveJson } from '../lib/prefs';
 import {
   EMPTY_FILTERS,
@@ -13,10 +13,12 @@ import {
   applyFilters,
   buildRecords,
   clampCount,
+  describeLibraryFilters,
   drawFromBag,
   getFilterOptions,
   languageLabel,
   movieYear,
+  parseLibraryAsk,
   toBackendFilters,
 } from '../lib/discoverEngine';
 
@@ -48,8 +50,10 @@ export default function Discover({
   onPreviewWeb,
   clearHistorySignal = 0,
   detailNode = null,
+  userKey = 'guest', // rounds and shortlist are kept per account, not per browser
 }) {
-  const [store, setStore] = useState(() => ({ ...DEFAULT_STORE, ...loadJson(STORE_KEY, {}) }));
+  const storeKey = `${STORE_KEY}::${userKey}`;
+  const [store, setStore] = useState(() => ({ ...DEFAULT_STORE, ...loadJson(storeKey, {}) }));
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [source, setSource] = useState(prefs.discoverSource);
   const [countText, setCountText] = useState(String(prefs.discoverCount));
@@ -59,8 +63,10 @@ export default function Discover({
   // True after the user presses Recommend on an empty bag (the last batch stays visible until then)
   const [showBagEmpty, setShowBagEmpty] = useState(false);
   const [message, setMessage] = useState({ text: '', tone: 'info' });
+  const [mode, setMode] = useState('draw'); // 'draw' | 'ask'
+  const [askInput, setAskInput] = useState('');
 
-  useEffect(() => { saveJson(STORE_KEY, store); }, [store]);
+  useEffect(() => { saveJson(storeKey, store); }, [storeKey, store]);
   useEffect(() => { setCountText(String(prefs.discoverCount)); }, [prefs.discoverCount]);
 
   // ── Library, filters, bag ──────────────────────────────────────────────
@@ -222,6 +228,56 @@ export default function Discover({
     setShowBagEmpty(false);
   };
 
+  // "Ask" mode: Library parses and filters entirely client-side (the
+  // sentence becomes the same filters shape the panel produces, then the
+  // ordinary bag/draw runs on it); Web sends the sentence to the backend,
+  // which is open-vocabulary and not limited to what's already owned. See
+  // docs/tasks/discover-chat-nlp.md for why these are two different paths.
+  const handleAsk = async () => {
+    const text = askInput.trim();
+    if (!text || isDrawing) return;
+    setMessage({ text: '', tone: 'info' });
+    setIsDrawing(true);
+    try {
+      if (source === 'library') {
+        const parsed = parseLibraryAsk(text, options);
+        setFilters(parsed);
+        setStore((s) => ({ ...s, seen: [] }));
+        const newPool = applyFilters(records, parsed);
+        const { picks } = drawFromBag(newPool, new Set(), count);
+        if (picks.length === 0) {
+          setMessage({ text: 'Nothing in your library matches that yet. Check Filters, or try rephrasing.', tone: 'info' });
+        } else {
+          pushRound({
+            source: 'library',
+            count: picks.length,
+            keys: picks.map((p) => p.key),
+            askText: text,
+            understood: describeLibraryFilters(parsed, options),
+          });
+        }
+      } else {
+        const res = await sendChatMessage(text, [], null, count);
+        if (!(res.results || []).length) {
+          setMessage({ text: res.reply || res.message || 'Nothing matched that on the web. Try rephrasing.', tone: 'info' });
+        } else {
+          pushRound({
+            source: 'web',
+            count: res.results.length,
+            movies: res.results,
+            askText: text,
+            understood: res.understood || [],
+          });
+        }
+      }
+      setAskInput('');
+    } catch (err) {
+      setMessage({ text: err.message || 'Could not process that.', tone: 'error' });
+    } finally {
+      setIsDrawing(false);
+    }
+  };
+
   // Settings > Discover > Clear history bumps this counter
   const lastClearSignal = useRef(clearHistorySignal);
   useEffect(() => {
@@ -324,9 +380,11 @@ export default function Discover({
   const stripRound = showBagEmpty ? viewedRound : previousRound;
   const stripCards = showBagEmpty ? viewedCards : previousCards;
 
+  const canAsk = !isDrawing && askInput.trim().length > 0;
+
   const composer = (
     <div className={`dz-composer ${isEmptyStage ? 'dz-composer--center' : 'dz-composer--dock'}`}>
-      {showChips && (
+      {showChips && mode === 'draw' && (
         <div className="dz-composer__chips">
           <span className="dz-composer__label">Drawing from</span>
           {chips.map((c) => (
@@ -343,7 +401,46 @@ export default function Discover({
           ))}
         </div>
       )}
+
+      {mode === 'ask' && (
+        <label className="dz-ask">
+          <Sparkles size={15} className="dz-ask__icon" />
+          <input
+            type="text"
+            className="dz-ask__input"
+            value={askInput}
+            onChange={(e) => setAskInput(e.target.value)}
+            placeholder={source === 'web' ? 'e.g. korean action movie from 2026…' : 'e.g. movies from my rom-com list, under 2 hours…'}
+            aria-label="Describe what you feel like watching"
+            disabled={isDrawing}
+            onKeyDown={(e) => { if (e.key === 'Enter' && canAsk) handleAsk(); }}
+          />
+        </label>
+      )}
+
       <div className="dz-composer__row">
+        <div className="dz-segs dz-segs--icons" role="group" aria-label="Mode">
+          <button
+            type="button"
+            className={`dz-seg ${mode === 'draw' ? 'is-on' : ''}`}
+            title="Random draw"
+            aria-label="Random draw"
+            aria-pressed={mode === 'draw'}
+            onClick={() => setMode('draw')}
+          >
+            <Shuffle size={17} />
+          </button>
+          <button
+            type="button"
+            className={`dz-seg ${mode === 'ask' ? 'is-on' : ''}`}
+            title="Ask"
+            aria-label="Ask"
+            aria-pressed={mode === 'ask'}
+            onClick={() => setMode('ask')}
+          >
+            <Sparkles size={17} />
+          </button>
+        </div>
         <div className="dz-step" role="group" aria-label="How many movies">
           <input
             className="dz-step__input"
@@ -354,7 +451,7 @@ export default function Discover({
             onChange={(e) => setCountText(e.target.value.replace(/\D/g, '').slice(0, 2))}
             onBlur={() => setCountText(String(count))}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && canRecommend) handleRecommend();
+              if (e.key === 'Enter' && mode === 'draw' && canRecommend) handleRecommend();
               if (e.key === 'ArrowUp') { e.preventDefault(); stepCount(1); }
               if (e.key === 'ArrowDown') { e.preventDefault(); stepCount(-1); }
             }}
@@ -370,10 +467,17 @@ export default function Discover({
           </div>
         </div>
         <div className="dz-composer__spacer" />
-        <button type="button" className="dz-cta" disabled={!canRecommend} onClick={handleRecommend}>
-          {isDrawing && <Loader2 size={18} className="dz-spinner" />}
-          {ctaLabel}
-        </button>
+        {mode === 'ask' ? (
+          <button type="button" className="dz-cta" disabled={!canAsk} onClick={handleAsk}>
+            {isDrawing ? <Loader2 size={18} className="dz-spinner" /> : <Send size={16} />}
+            Ask
+          </button>
+        ) : (
+          <button type="button" className="dz-cta" disabled={!canRecommend} onClick={handleRecommend}>
+            {isDrawing && <Loader2 size={18} className="dz-spinner" />}
+            {ctaLabel}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -397,9 +501,11 @@ export default function Discover({
     </div>
   );
 
-  const roundMeta = viewedRound?.source === 'web'
-    ? `${viewedRound.count} from TMDB · titles you own are left out`
-    : `${viewedRound?.count ?? 0} from your library · none repeated`;
+  const roundMeta = viewedRound?.askText
+    ? `“${viewedRound.askText}” · ${viewedRound.count} ${viewedRound.source === 'web' ? 'from TMDB' : 'from your library'}`
+    : viewedRound?.source === 'web'
+      ? `${viewedRound.count} from TMDB · titles you own are left out`
+      : `${viewedRound?.count ?? 0} from your library · none repeated`;
 
   return (
     <div className="dz" style={{ display: visible ? 'contents' : 'none' }}>
@@ -487,6 +593,14 @@ export default function Discover({
                       <h2 className="dz-heading dz-round__title">Round {viewedRound.n}</h2>
                       <span className="dz-round__meta">{roundMeta}</span>
                     </div>
+                    {viewedRound.understood?.length > 0 && (
+                      <div className="dz-composer__chips" style={{ padding: 0, marginBottom: 16 }}>
+                        <span className="dz-composer__label">Understood as</span>
+                        {viewedRound.understood.map((u, i) => (
+                          <span key={`${u}-${i}`} className="dz-chip is-on">{u}</span>
+                        ))}
+                      </div>
+                    )}
                     {viewedCards.length > 0 ? renderCards(viewedCards) : (
                       <p className="dz-notice">The movies from this round are no longer in your library.</p>
                     )}

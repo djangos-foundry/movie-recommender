@@ -90,7 +90,8 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS Settings
-CORS_ALLOW_ALL_ORIGINS = True
+# Cookie-based sessions need explicit origins (a wildcard is not allowed
+# together with credentials).
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
@@ -98,9 +99,13 @@ CORS_ALLOWED_ORIGINS = [
     'http://127.0.0.1:3000',
 ]
 CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
 # Django REST Framework Settings
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'movies.auth.GuestSessionAuthentication',
+    ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
@@ -118,3 +123,6 @@ TMDB_API_KEY = os.getenv('TMDB_API_KEY', '')
 # Claude / Anthropic API key for the natural-language chat box.
 # Optional: without it the chat falls back to a local keyword parser.
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
+
+# Google sign-in (OAuth Web client ID; public, safe to expose to the frontend)
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')

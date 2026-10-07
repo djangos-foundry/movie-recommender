@@ -9,6 +9,7 @@ from rest_framework.generics import (
     get_object_or_404,
 )
 
+from .auth import owned
 from .models import MovieList, Movie, MovieListItem, ScheduledWatch, TRASH_RETENTION_DAYS
 from .serializers import (
     MovieListSerializer,
@@ -20,8 +21,8 @@ from .serializers import (
     TrashedItemSerializer,
 )
 from .services.tmdb import tmdb_service, format_poster_url, format_backdrop_url, normalize_genres
-from .services.recommender import get_recommendations, get_filter_options
-from .services.chat import interpret
+from .services.recommender import get_recommendations, get_filter_options, get_web_recommendations
+from .services.chat import parse_open_vocabulary
 
 
 class MovieListIndexView(ListCreateAPIView):
@@ -32,12 +33,14 @@ class MovieListIndexView(ListCreateAPIView):
     serializer_class = MovieListSerializer
 
     def get_queryset(self):
-        return MovieList.objects.annotate(items_count=Count('items')).order_by('order', 'created_at')
+        qs = MovieList.objects.annotate(items_count=Count('items')).order_by('order', 'created_at')
+        return owned(qs, self.request)
 
     def perform_create(self, serializer):
-        max_order = MovieList.objects.aggregate(Max('order'))['order__max']
+        mine = MovieList.objects.filter(owner=self.request.user)
+        max_order = mine.aggregate(Max('order'))['order__max']
         new_order = (max_order + 1) if max_order is not None else 0
-        serializer.save(order=new_order)
+        serializer.save(order=new_order, owner=self.request.user)
 
 
 class MovieListReorderView(APIView):
@@ -50,7 +53,7 @@ class MovieListReorderView(APIView):
             return Response({"error": "ordered_ids list is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         for index, list_id in enumerate(ordered_ids):
-            MovieList.objects.filter(id=list_id).update(order=index)
+            owned(MovieList.objects.filter(id=list_id), request).update(order=index)
 
         return Response({"status": "success", "message": "Lists reordered successfully"})
 
@@ -62,7 +65,9 @@ class MovieListDetailView(RetrieveUpdateDestroyAPIView):
     DELETE /api/lists/<int:pk>/ - Soft-delete list (moves it to Trash for 30 days).
     """
     serializer_class = MovieListSerializer
-    queryset = MovieList.objects.annotate(items_count=Count('items'))
+
+    def get_queryset(self):
+        return owned(MovieList.objects.annotate(items_count=Count('items')), self.request)
 
     def perform_destroy(self, instance):
         instance.deleted_at = timezone.now()
@@ -76,13 +81,13 @@ class MovieListMoviesView(APIView):
     """
 
     def get(self, request, pk):
-        movie_list = get_object_or_404(MovieList, pk=pk)
+        movie_list = get_object_or_404(owned(MovieList.objects.all(), request), pk=pk)
         items = movie_list.items.select_related('movie').filter(deleted_at__isnull=True)
         serializer = MovieListItemSerializer(items, many=True)
         return Response(serializer.data)
 
     def post(self, request, pk):
-        movie_list = get_object_or_404(MovieList, pk=pk)
+        movie_list = get_object_or_404(owned(MovieList.objects.all(), request), pk=pk)
         serializer = AddMovieToListSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -216,8 +221,11 @@ class MovieListItemDetailView(RetrieveUpdateDestroyAPIView):
     PATCH/PUT /api/list-items/<int:pk>/ - Update status, user_rating, user_notes.
     DELETE /api/list-items/<int:pk>/ - Soft-delete item (moves it to Trash for 30 days).
     """
-    queryset = MovieListItem.objects.select_related('list', 'movie').all()
     serializer_class = MovieListItemSerializer
+
+    def get_queryset(self):
+        qs = MovieListItem.objects.select_related('list', 'movie').all()
+        return owned(qs, self.request, 'list__owner')
 
     def perform_destroy(self, instance):
         instance.deleted_at = timezone.now()
@@ -250,7 +258,7 @@ class ScheduledWatchListCreateView(ListCreateAPIView):
     serializer_class = ScheduledWatchSerializer
 
     def get_queryset(self):
-        qs = ScheduledWatch.objects.select_related('movie').all()
+        qs = owned(ScheduledWatch.objects.select_related('movie').all(), self.request)
         start = self.request.query_params.get('start')
         end = self.request.query_params.get('end')
         if start:
@@ -259,6 +267,9 @@ class ScheduledWatchListCreateView(ListCreateAPIView):
             qs = qs.filter(start_time__lte=end)
         return qs
 
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
 
 class ScheduledWatchDetailView(RetrieveUpdateDestroyAPIView):
     """
@@ -266,8 +277,10 @@ class ScheduledWatchDetailView(RetrieveUpdateDestroyAPIView):
     PUT/PATCH /api/schedule/<int:pk>/ - Reschedule, edit notes, or mark watched.
     DELETE /api/schedule/<int:pk>/ - Remove it from the calendar.
     """
-    queryset = ScheduledWatch.objects.select_related('movie').all()
     serializer_class = ScheduledWatchSerializer
+
+    def get_queryset(self):
+        return owned(ScheduledWatch.objects.select_related('movie').all(), self.request)
 
 
 class TMDBSearchView(APIView):
@@ -328,7 +341,7 @@ class RecommendationFiltersView(APIView):
 
     def get(self, request):
         list_id = _parse_list_id(request.query_params.get('list_id'))
-        return Response(get_filter_options(list_id=list_id))
+        return Response(get_filter_options(list_id=list_id, user=request.user))
 
 
 class RecommendationView(APIView):
@@ -366,16 +379,24 @@ class RecommendationView(APIView):
             'min_rating': _parse_number(request.query_params.get('min_rating'), cast=float),
         }
 
-        data = get_recommendations(count=count, list_id=list_id, filters=filters)
+        data = get_recommendations(count=count, list_id=list_id, filters=filters, user=request.user)
         return Response(data)
 
 
 class ChatRecommendView(APIView):
     """
-    POST /api/chat/  {"message": "...", "history": [...], "list_id": null}
+    POST /api/chat/  {"message": "...", "count": 5}
 
-    Interprets the message into the same filters the filter panel produces,
-    then runs the existing sampler with them.
+    The Discover "Ask" composer's Web-source path. Turns a free-form
+    sentence into TMDB discover criteria - genre, language, year/decade,
+    runtime, rating, and cast/crew via TMDB's own person search - and
+    returns candidates straight from TMDB: open vocabulary, not limited to
+    what the user already owns (see services/chat.py parse_open_vocabulary
+    and docs/tasks/discover-chat-nlp.md for the design).
+
+    The Library source's Ask mode never calls this: it parses and filters
+    entirely client-side instead, against data already loaded in the
+    browser (see frontend/src/lib/discoverEngine.js parseLibraryAsk).
     """
 
     def post(self, request):
@@ -386,18 +407,13 @@ class ChatRecommendView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        history = request.data.get('history') or []
-        if not isinstance(history, list):
-            history = []
-
-        list_id = _parse_list_id(request.data.get('list_id'))
         count = _parse_number(request.data.get('count')) or 5
         count = max(1, min(count, 20))
 
-        filters, reply, source = interpret(message, list_id=list_id, history=history)
-        data = get_recommendations(count=count, list_id=list_id, filters=filters)
+        filters, reply, understood = parse_open_vocabulary(message)
+        data = get_web_recommendations(count=count, filters=filters, user=request.user)
 
-        return Response({**data, "reply": reply, "filters": filters, "source": source})
+        return Response({**data, "reply": reply, "filters": filters, "understood": understood})
 
 
 class SeedDataView(APIView):
@@ -406,12 +422,15 @@ class SeedDataView(APIView):
     """
 
     def get(self, request):
-        return self._seed()
+        return self._seed(request)
 
     def post(self, request):
-        return self._seed()
+        return self._seed(request)
 
-    def _seed(self):
+    def _seed(self, request):
+        if not request.user.is_authenticated:
+            return Response({"error": "No session yet; use POST."}, status=status.HTTP_401_UNAUTHORIZED)
+        user = request.user
         default_lists = [
             {
                 "name": "Plan to Watch",
@@ -442,6 +461,7 @@ class SeedDataView(APIView):
         created_lists = []
         for lst_info in default_lists:
             obj, _ = MovieList.objects.get_or_create(
+                owner=user,
                 name=lst_info["name"],
                 defaults={
                     "color": lst_info["color"],
@@ -452,7 +472,7 @@ class SeedDataView(APIView):
             created_lists.append(obj)
 
         # Seed Interstellar in "Adventure"
-        adventure_list = MovieList.objects.get(name="Adventure")
+        adventure_list = MovieList.objects.get(owner=user, name="Adventure")
         interstellar_data = tmdb_service.get_movie_details(157336) or {}
 
         interstellar_movie, _ = Movie.objects.update_or_create(
@@ -502,7 +522,7 @@ class SeedDataView(APIView):
             item.save()
 
         # Re-fetch all lists with counts
-        all_lists = MovieList.objects.annotate(items_count=Count('items')).order_by('created_at')
+        all_lists = MovieList.objects.filter(owner=user).annotate(items_count=Count('items')).order_by('created_at')
         serializer = MovieListSerializer(all_lists, many=True)
 
         return Response(
@@ -536,11 +556,11 @@ class TrashView(APIView):
     def get(self, request):
         _purge_expired_trash()
 
-        trashed_lists = MovieList.all_objects.filter(deleted_at__isnull=False)
+        trashed_lists = owned(MovieList.all_objects.filter(deleted_at__isnull=False), request)
         trashed_list_ids = set(trashed_lists.values_list('id', flat=True))
 
         trashed_items = (
-            MovieListItem.all_objects
+            owned(MovieListItem.all_objects, request, 'list__owner')
             .select_related('list', 'movie')
             .filter(deleted_at__isnull=False)
             .exclude(list_id__in=trashed_list_ids)
@@ -563,13 +583,13 @@ class TrashRestoreView(APIView):
 
     def post(self, request, kind, pk):
         if kind == 'list':
-            obj = get_object_or_404(MovieList.all_objects, pk=pk, deleted_at__isnull=False)
+            obj = get_object_or_404(owned(MovieList.all_objects, request), pk=pk, deleted_at__isnull=False)
             obj.deleted_at = None
             obj.save(update_fields=['deleted_at'])
             return Response(TrashedListSerializer(obj).data)
 
         if kind == 'item':
-            obj = get_object_or_404(MovieListItem.all_objects, pk=pk, deleted_at__isnull=False)
+            obj = get_object_or_404(owned(MovieListItem.all_objects, request, 'list__owner'), pk=pk, deleted_at__isnull=False)
             obj.deleted_at = None
             obj.save(update_fields=['deleted_at'])
             return Response(TrashedItemSerializer(obj).data)
@@ -585,12 +605,12 @@ class TrashPermanentDeleteView(APIView):
 
     def delete(self, request, kind, pk):
         if kind == 'list':
-            obj = get_object_or_404(MovieList.all_objects, pk=pk, deleted_at__isnull=False)
+            obj = get_object_or_404(owned(MovieList.all_objects, request), pk=pk, deleted_at__isnull=False)
             obj.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
 
         if kind == 'item':
-            obj = get_object_or_404(MovieListItem.all_objects, pk=pk, deleted_at__isnull=False)
+            obj = get_object_or_404(owned(MovieListItem.all_objects, request, 'list__owner'), pk=pk, deleted_at__isnull=False)
             obj.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
 

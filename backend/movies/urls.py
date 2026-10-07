@@ -1,4 +1,5 @@
 from django.urls import path
+from .auth_views import MeView, GoogleLoginView, LogoutView
 from .views import (
     MovieListIndexView,
     MovieListReorderView,
@@ -19,6 +20,11 @@ from .views import (
 )
 
 urlpatterns = [
+    # Accounts
+    path('auth/me/', MeView.as_view(), name='auth-me'),
+    path('auth/google/', GoogleLoginView.as_view(), name='auth-google'),
+    path('auth/logout/', LogoutView.as_view(), name='auth-logout'),
+
     # Lists
     path('lists/', MovieListIndexView.as_view(), name='movie-list-index'),
     path('lists/reorder/', MovieListReorderView.as_view(), name='movie-list-reorder'),

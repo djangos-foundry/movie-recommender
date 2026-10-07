@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { User, Settings, LogOut, Film, Compass, CalendarDays, Trash2 } from 'lucide-react';
+import GoogleSignInButton from './GoogleSignInButton';
+import { CircleUser, Settings, LogOut, Undo2, Film, Compass, CalendarDays, Trash2 } from 'lucide-react';
 
 const SECTIONS = [
   { id: 'library', label: 'Library', icon: Film, shortcutKey: 'goLibrary', fallback: 'Ctrl+Shift+1' },
@@ -16,8 +17,17 @@ export default function ActivityRail({
   onOpenTrash,
   shortcuts = {},
   totalMoviesCount = 0,
+  user = null, // null = guest; { name, email } when signed in with Google
+  googleClientId = '',
+  onGoogleCredential,
+  onSignOut,
 }) {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const initials = user?.name
+    ? user.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
+    : 'CT';
+
+  const closeMenu = () => setIsUserMenuOpen(false);
 
   return (
     <aside className="activity-rail">
@@ -28,9 +38,12 @@ export default function ActivityRail({
             type="button"
             onClick={() => setIsUserMenuOpen((prev) => !prev)}
             className={`activity-rail__avatar-btn ${isUserMenuOpen ? 'is-active' : ''}`}
-            title="Account"
+            title={user ? 'Account' : 'Sign in'}
+            aria-label="Account"
           >
-            <span className="activity-rail__avatar-initials">CT</span>
+            {user
+              ? <span className="activity-rail__avatar-initials">{initials}</span>
+              : <CircleUser size={20} strokeWidth={1.5} />}
           </button>
 
           {/* Popover */}
@@ -38,16 +51,32 @@ export default function ActivityRail({
             <>
               <div
                 className="activity-rail__backdrop"
-                onClick={() => setIsUserMenuOpen(false)}
+                onClick={closeMenu}
               />
               <div className="activity-rail__popover">
-                <div className="activity-rail__popover-header">
-                  <div className="activity-rail__popover-avatar">CT</div>
-                  <div>
-                    <p className="activity-rail__popover-name">Movie Enthusiast</p>
-                    <p className="activity-rail__popover-email">nexus@cinetrack.local</p>
+                {user ? (
+                  <div className="activity-rail__popover-header">
+                    <div className="activity-rail__popover-avatar">{initials}</div>
+                    <div>
+                      <p className="activity-rail__popover-name">{user.name}</p>
+                      <p className="activity-rail__popover-email">{user.email}</p>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="activity-rail__guest">
+                    <p className="activity-rail__popover-name">Save your lists</p>
+                    <p className="activity-rail__guest-text">
+                      You're browsing as a guest. Your lists stay in this browser only.
+                    </p>
+                    <GoogleSignInButton
+                      clientId={googleClientId}
+                      onCredential={onGoogleCredential}
+                    />
+                    <p className="activity-rail__guest-text">
+                      Sign in to keep them on any device.
+                    </p>
+                  </div>
+                )}
                 <div className="activity-rail__popover-stat">
                   <span>Library</span>
                   <span className="activity-rail__popover-stat-value">{totalMoviesCount}</span>
@@ -55,7 +84,7 @@ export default function ActivityRail({
                 <button
                   type="button"
                   onClick={() => {
-                    setIsUserMenuOpen(false);
+                    closeMenu();
                     if (onOpenSettings) onOpenSettings();
                   }}
                   className="activity-rail__popover-btn"
@@ -63,6 +92,19 @@ export default function ActivityRail({
                   <Settings size={13} />
                   <span>Settings</span>
                 </button>
+                {user && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeMenu();
+                      if (onSignOut) onSignOut();
+                    }}
+                    className="activity-rail__popover-btn"
+                  >
+                    <Undo2 size={13} />
+                    <span>Sign out</span>
+                  </button>
+                )}
               </div>
             </>
           )}
