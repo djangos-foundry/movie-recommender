@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import GoogleSignInButton from './GoogleSignInButton';
-import { CircleUser, Settings, LogOut, Undo2, Film, Compass, CalendarDays, Trash2 } from 'lucide-react';
+import { CalendarCheck, CalendarPlus, Unplug, CircleUser, Settings, LogOut, Undo2, Film, Compass, CalendarDays, Trash2 } from 'lucide-react';
 
 const SECTIONS = [
   { id: 'library', label: 'Library', icon: Film, shortcutKey: 'goLibrary', fallback: 'Ctrl+Shift+1' },
@@ -21,6 +21,10 @@ export default function ActivityRail({
   googleClientId = '',
   onGoogleCredential,
   onSignOut,
+  calendar = null, // { connected, needs_reconnect } once the account is signed in
+  isCalendarBusy = false,
+  onConnectCalendar,
+  onDisconnectCalendar,
 }) {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const initials = user?.name
@@ -92,6 +96,35 @@ export default function ActivityRail({
                   <Settings size={13} />
                   <span>Settings</span>
                 </button>
+                {user && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onConnectCalendar?.()}
+                      disabled={isCalendarBusy || calendar?.connected}
+                      className="activity-rail__popover-btn"
+                      title={calendar?.connected ? 'Events you schedule are added to the CineTrack calendar in Google Calendar' : undefined}
+                    >
+                      {calendar?.connected ? <CalendarCheck size={13} /> : <CalendarPlus size={13} />}
+                      <span>
+                        {isCalendarBusy ? 'Connecting…'
+                          : calendar?.connected ? 'Google Calendar connected'
+                          : calendar?.needs_reconnect ? 'Reconnect Google Calendar'
+                          : 'Connect Google Calendar'}
+                      </span>
+                    </button>
+                    {calendar?.connected && (
+                      <button
+                        type="button"
+                        onClick={() => onDisconnectCalendar?.()}
+                        className="activity-rail__popover-btn activity-rail__popover-btn--quiet"
+                      >
+                        <Unplug size={13} />
+                        <span>Disconnect calendar</span>
+                      </button>
+                    )}
+                  </>
+                )}
                 {user && (
                   <button
                     type="button"

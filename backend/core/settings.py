@@ -126,3 +126,9 @@ ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
 
 # Google sign-in (OAuth Web client ID; public, safe to expose to the frontend)
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
+
+# Google Calendar sync: the secret exchanges the one-time consent code for
+# tokens (server side only); the Fernet key encrypts stored refresh tokens.
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
+TOKEN_ENCRYPTION_KEY = os.getenv('TOKEN_ENCRYPTION_KEY', '')
+GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.app.created'

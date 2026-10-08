@@ -374,7 +374,15 @@ body {
   transition: all 0.13s;
 }
 
-.activity-rail__popover-btn:hover {
+.activity-rail__popover-btn:disabled {
+  cursor: default;
+}
+
+.activity-rail__popover-btn--quiet {
+  color: var(--text-muted);
+}
+
+.activity-rail__popover-btn:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text-primary);
 }

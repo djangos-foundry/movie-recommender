@@ -233,3 +233,149 @@ class WebAskFeatureTests(APITestCase):
                    return_value={"results": [{"title": "A"}], "message": ""}) as draw:
             APIClient().post('/api/chat/', {'message': 'surprise me'}, format='json')
         draw.assert_called_once()
+
+
+class FakeResponse:
+    def __init__(self, status_code=200, payload=None):
+        self.status_code = status_code
+        self._payload = payload or {}
+
+    def json(self):
+        return self._payload
+
+
+def _calendar_settings():
+    from cryptography.fernet import Fernet
+    return override_settings(
+        GOOGLE_CLIENT_ID='cid', GOOGLE_CLIENT_SECRET='sec', TOKEN_ENCRYPTION_KEY=Fernet.generate_key().decode(),
+    )
+
+
+@_calendar_settings()
+class CalendarSyncTests(APITestCase):
+    def setUp(self):
+        from .models import Movie
+        from django.core.cache import cache
+        cache.clear()
+        self.client_a = APIClient()
+        with patch('movies.auth_views.id_token.verify_oauth2_token', return_value=google_info('sub-A')):
+            self.client_a.post('/api/auth/google/', {'credential': 'x'}, format='json')
+        self.movie = Movie.objects.create(tmdb_id=1, title='Interstellar', imdb_id='tt0816692')
+
+    def watch_payload(self):
+        return {'movie_id': self.movie.id, 'start_time': '2030-01-01T18:00:00Z', 'end_time': '2030-01-01T20:49:00Z'}
+
+    def connect(self):
+        token = FakeResponse(200, {
+            'access_token': 'at', 'refresh_token': 'rt-secret', 'expires_in': 3600,
+            'scope': 'openid https://www.googleapis.com/auth/calendar.app.created',
+        })
+        made = FakeResponse(200, {'id': 'cal-1'})
+        with patch('movies.services.gcal._token_request', return_value=token), \
+             patch('movies.services.gcal._call', return_value=made) as call:
+            res = self.client_a.post('/api/calendar/connect/', {'code': 'c', 'time_zone': 'Asia/Kolkata'}, format='json')
+        return res, call
+
+    def test_guest_cannot_connect(self):
+        res = APIClient().post('/api/calendar/connect/', {'code': 'c'}, format='json')
+        self.assertEqual(res.status_code, 403)
+
+    def test_connect_stores_encrypted_token_and_creates_calendar(self):
+        from .models import GoogleCalendarConnection
+        res, call = self.connect()
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.json()['connected'])
+        conn = GoogleCalendarConnection.objects.get()
+        self.assertEqual(conn.calendar_id, 'cal-1')
+        self.assertNotIn('rt-secret', conn.refresh_token_enc)
+        self.assertEqual(call.call_args_list[0].kwargs['json']['timeZone'], 'Asia/Kolkata')
+
+    def test_connect_rejects_missing_scope_or_refresh_token(self):
+        no_scope = FakeResponse(200, {'access_token': 'a', 'refresh_token': 'r', 'scope': 'openid'})
+        with patch('movies.services.gcal._token_request', return_value=no_scope):
+            res = self.client_a.post('/api/calendar/connect/', {'code': 'c'}, format='json')
+        self.assertEqual(res.status_code, 400)
+        scope = 'https://www.googleapis.com/auth/calendar.app.created'
+        no_refresh = FakeResponse(200, {'access_token': 'a', 'scope': scope})
+        with patch('movies.services.gcal._token_request', return_value=no_refresh):
+            res = self.client_a.post('/api/calendar/connect/', {'code': 'c'}, format='json')
+        self.assertIn('permissions', res.json()['error'])
+
+    def test_without_connection_nothing_is_called(self):
+        with patch('movies.services.gcal._call') as call:
+            res = self.client_a.post('/api/schedule/', self.watch_payload(), format='json')
+        self.assertEqual(res.status_code, 201)
+        call.assert_not_called()
+        self.assertEqual(res.json()['sync_status'], 'not_synced')
+
+    def test_create_update_delete_follow_to_google(self):
+        self.connect()
+        with patch('movies.services.gcal._access_token', return_value='at'), \
+             patch('movies.services.gcal._call', return_value=FakeResponse(200, {'id': 'evt-1'})) as call:
+            created = self.client_a.post('/api/schedule/', self.watch_payload(), format='json').json()
+            self.assertEqual(created['sync_status'], 'synced')
+            self.assertEqual(created['google_event_id'], 'evt-1')
+            body = call.call_args.kwargs['json']
+            self.assertEqual(body['summary'], 'Movie: Interstellar')
+            self.assertEqual(body['extendedProperties']['private']['cinetrackWatchId'], str(created['id']))
+
+            self.client_a.patch(f"/api/schedule/{created['id']}/", {'notes': 'popcorn'}, format='json')
+            self.assertEqual(call.call_args.args[0], 'PATCH')
+
+            self.client_a.delete(f"/api/schedule/{created['id']}/")
+            self.assertEqual(call.call_args.args[0], 'DELETE')
+        self.assertEqual(self.client_a.get('/api/schedule/').json(), [])
+
+    def test_event_deleted_in_google_is_recreated(self):
+        self.connect()
+        with patch('movies.services.gcal._access_token', return_value='at'), \
+             patch('movies.services.gcal._call', return_value=FakeResponse(200, {'id': 'evt-1'})):
+            created = self.client_a.post('/api/schedule/', self.watch_payload(), format='json').json()
+        replies = [FakeResponse(404), FakeResponse(200, {'id': 'evt-2'})]
+        with patch('movies.services.gcal._access_token', return_value='at'), \
+             patch('movies.services.gcal._call', side_effect=replies):
+            res = self.client_a.patch(f"/api/schedule/{created['id']}/", {'notes': 'x'}, format='json').json()
+        self.assertEqual(res['google_event_id'], 'evt-2')
+        self.assertEqual(res['sync_status'], 'synced')
+
+    def test_google_failure_still_saves_the_watch(self):
+        self.connect()
+        with patch('movies.services.gcal._access_token', return_value='at'), \
+             patch('movies.services.gcal._call', return_value=FakeResponse(500)):
+            res = self.client_a.post('/api/schedule/', self.watch_payload(), format='json')
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.json()['sync_status'], 'error')
+        self.assertTrue(res.json()['sync_error'])
+
+    def test_revoked_access_marks_connection_broken(self):
+        from django.core.cache import cache
+        self.connect()
+        cache.clear()
+        with patch('movies.services.gcal._token_request', return_value=FakeResponse(400, {'error': 'invalid_grant'})):
+            res = self.client_a.post('/api/schedule/', self.watch_payload(), format='json')
+        self.assertEqual(res.json()['sync_status'], 'error')
+        self.assertTrue(self.client_a.get('/api/calendar/status/').json()['needs_reconnect'])
+
+    def test_disconnect_keeps_calendar_and_reconnect_reuses_it(self):
+        from .models import GoogleCalendarConnection
+        self.connect()
+        with patch('movies.services.gcal._access_token', return_value='at'), \
+             patch('movies.services.gcal.requests.post'):
+            res = self.client_a.post('/api/calendar/disconnect/', {}, format='json')
+        self.assertFalse(res.json()['connected'])
+        conn = GoogleCalendarConnection.objects.get()
+        self.assertEqual((conn.status, conn.calendar_id, conn.refresh_token_enc), ('disconnected', 'cal-1', ''))
+
+        _, call = self.connect()
+        methods = [c.args[0] for c in call.call_args_list]
+        self.assertEqual(methods, ['GET'])  # checked the old calendar, did not create another
+
+    def test_connect_pushes_existing_upcoming_watches(self):
+        self.client_a.post('/api/schedule/', self.watch_payload(), format='json')
+        scope = 'https://www.googleapis.com/auth/calendar.app.created'
+        token = FakeResponse(200, {'access_token': 'at', 'refresh_token': 'rt', 'expires_in': 3600, 'scope': scope})
+        replies = iter([FakeResponse(200, {'id': 'cal-1'}), FakeResponse(200, {'id': 'evt-9'})])
+        with patch('movies.services.gcal._token_request', return_value=token), \
+             patch('movies.services.gcal._call', side_effect=lambda *a, **k: next(replies)):
+            res = self.client_a.post('/api/calendar/connect/', {'code': 'c'}, format='json').json()
+        self.assertEqual((res['synced'], res['failed']), (1, 0))

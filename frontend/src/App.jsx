@@ -26,7 +26,11 @@ import {
   getMe,
   loginWithGoogle,
   logout,
+  getCalendarStatus,
+  connectCalendar,
+  disconnectCalendar,
 } from './api/client';
+import { requestCalendarCode, browserTimeZone } from './lib/googleCalendar';
 
 import { AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
 
@@ -175,6 +179,44 @@ export default function App() {
       showToast(err.message || 'Sign out failed', 'error');
     }
   }, []);
+
+  // Google Calendar sync: only meaningful for a signed-in Google account
+  const [calendar, setCalendar] = useState(null);
+  const [isCalendarBusy, setIsCalendarBusy] = useState(false);
+  useEffect(() => {
+    if (!authUser) { setCalendar(null); return; }
+    getCalendarStatus().then(setCalendar).catch((err) => console.warn('Could not load calendar status:', err));
+  }, [authUser]);
+
+  const handleConnectCalendar = async () => {
+    if (isCalendarBusy || !googleClientId) return;
+    setIsCalendarBusy(true);
+    try {
+      // requestCalendarCode must be called straight from the click (popup rule)
+      const code = await requestCalendarCode(googleClientId, authUser?.email);
+      const result = await connectCalendar(code, browserTimeZone());
+      setCalendar(result);
+      showToast(
+        result.synced
+          ? `Google Calendar connected. ${result.synced} upcoming ${result.synced === 1 ? 'watch' : 'watches'} added.`
+          : 'Google Calendar connected. New watches will appear in it.',
+        'success',
+      );
+    } catch (err) {
+      showToast(err.message || 'Could not connect Google Calendar', 'error');
+    } finally {
+      setIsCalendarBusy(false);
+    }
+  };
+
+  const handleDisconnectCalendar = async () => {
+    try {
+      setCalendar(await disconnectCalendar(false));
+      showToast('Google Calendar disconnected. Existing events stay in Google.', 'info');
+    } catch (err) {
+      showToast(err.message || 'Could not disconnect', 'error');
+    }
+  };
 
   useEffect(() => {
     fetchLists();
@@ -719,6 +761,10 @@ export default function App() {
         googleClientId={googleClientId}
         onGoogleCredential={handleGoogleCredential}
         onSignOut={handleSignOut}
+        calendar={calendar}
+        isCalendarBusy={isCalendarBusy}
+        onConnectCalendar={handleConnectCalendar}
+        onDisconnectCalendar={handleDisconnectCalendar}
       />
 
       {/* Library section */}

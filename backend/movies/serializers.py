@@ -102,9 +102,11 @@ class ScheduledWatchSerializer(serializers.ModelSerializer):
             'notes',
             'is_watched',
             'google_event_id',
+            'sync_status',
+            'sync_error',
             'created_at',
         ]
-        read_only_fields = ['id', 'google_event_id', 'created_at']
+        read_only_fields = ['id', 'google_event_id', 'sync_status', 'sync_error', 'created_at']
 
     def validate(self, attrs):
         start = attrs.get('start_time', getattr(self.instance, 'start_time', None))

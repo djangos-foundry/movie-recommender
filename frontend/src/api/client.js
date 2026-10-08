@@ -269,6 +269,29 @@ export async function loginWithGoogle(credential) {
   return data;
 }
 
+// 11. Google Calendar sync
+export async function getCalendarStatus() {
+  return await fetchJson('/calendar/status/');
+}
+
+export async function connectCalendar(code, timeZone) {
+  return await fetchJson('/calendar/connect/', {
+    method: 'POST',
+    body: JSON.stringify({ code, time_zone: timeZone }),
+  });
+}
+
+export async function syncCalendar() {
+  return await fetchJson('/calendar/sync/', { method: 'POST' });
+}
+
+export async function disconnectCalendar(deleteCalendar = false) {
+  return await fetchJson('/calendar/disconnect/', {
+    method: 'POST',
+    body: JSON.stringify({ delete_calendar: deleteCalendar }),
+  });
+}
+
 export async function logout() {
   return await fetchJson('/auth/logout/', { method: 'POST' });
 }

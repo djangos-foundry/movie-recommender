@@ -22,6 +22,7 @@ from .serializers import (
 )
 from .services.tmdb import tmdb_service, format_poster_url, format_backdrop_url, normalize_genres
 from .services.recommender import get_recommendations, get_filter_options, get_web_recommendations
+from .services import gcal
 from .services.chat import parse_open_vocabulary, _RANDOM_RE
 
 
@@ -268,7 +269,8 @@ class ScheduledWatchListCreateView(ListCreateAPIView):
         return qs
 
     def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
+        watch = serializer.save(owner=self.request.user)
+        gcal.sync_watch(watch)  # no-op unless Google Calendar is connected; never raises
 
 
 class ScheduledWatchDetailView(RetrieveUpdateDestroyAPIView):
@@ -281,6 +283,14 @@ class ScheduledWatchDetailView(RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return owned(ScheduledWatch.objects.select_related('movie').all(), self.request)
+
+    def perform_update(self, serializer):
+        watch = serializer.save()
+        gcal.sync_watch(watch)
+
+    def perform_destroy(self, instance):
+        gcal.delete_event(instance)
+        instance.delete()
 
 
 class TMDBSearchView(APIView):
