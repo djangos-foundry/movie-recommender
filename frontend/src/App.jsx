@@ -21,9 +21,15 @@ import {
   addMovieToList,
   updateListItem,
   removeListItem,
-  seedSampleData,
   getTMDBMovie,
+  getMe,
+  loginWithGoogle,
+  logout,
+  getCalendarStatus,
+  connectCalendar,
+  disconnectCalendar,
 } from './api/client';
+import { requestCalendarCode, browserTimeZone } from './lib/googleCalendar';
 
 import { AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
 
@@ -72,7 +78,6 @@ export default function App() {
   // Loading & Network state
   const [isLoadingLists, setIsLoadingLists] = useState(true);
   const [isLoadingMovies, setIsLoadingMovies] = useState(false);
-  const [isSeeding, setIsSeeding] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [backendError, setBackendError] = useState(null);
 
@@ -117,18 +122,6 @@ export default function App() {
       const data = await getLists();
       const listData = Array.isArray(data) ? data : [];
       setLists(listData);
-
-      // If no lists exist, try auto-seeding once
-      if (listData.length === 0) {
-        try {
-          const seeded = await seedSampleData();
-          if (seeded && seeded.lists) {
-            setLists(seeded.lists);
-          }
-        } catch (seedErr) {
-          console.warn('Auto-seed attempt:', seedErr);
-        }
-      }
     } catch (err) {
       console.error('Error fetching lists:', err);
       setBackendError(
@@ -140,6 +133,76 @@ export default function App() {
       setIsLoadingLists(false);
     }
   }, []);
+
+  // Who is signed in (null = guest). Guests can use the app; signing in with
+  // Google keeps their lists on the account.
+  const [authUser, setAuthUser] = useState(null);
+  const [googleClientId, setGoogleClientId] = useState('');
+  useEffect(() => {
+    getMe()
+      .then((me) => {
+        setAuthUser(me.user);
+        setGoogleClientId(me.google_client_id || '');
+      })
+      .catch((err) => console.warn('Could not load account:', err));
+  }, []);
+
+  // Reload afterwards so every screen refetches data for the new account.
+  const handleGoogleCredential = useCallback(async (credential) => {
+    try {
+      await loginWithGoogle(credential);
+      window.location.reload();
+    } catch (err) {
+      showToast(err.message || 'Google sign-in failed', 'error');
+    }
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    try {
+      await logout();
+      window.location.reload();
+    } catch (err) {
+      showToast(err.message || 'Sign out failed', 'error');
+    }
+  }, []);
+
+  // Google Calendar sync: only meaningful for a signed-in Google account
+  const [calendar, setCalendar] = useState(null);
+  const [isCalendarBusy, setIsCalendarBusy] = useState(false);
+  useEffect(() => {
+    if (!authUser) { setCalendar(null); return; }
+    getCalendarStatus().then(setCalendar).catch((err) => console.warn('Could not load calendar status:', err));
+  }, [authUser]);
+
+  const handleConnectCalendar = async () => {
+    if (isCalendarBusy || !googleClientId) return;
+    setIsCalendarBusy(true);
+    try {
+      // requestCalendarCode must be called straight from the click (popup rule)
+      const code = await requestCalendarCode(googleClientId, authUser?.email);
+      const result = await connectCalendar(code, browserTimeZone());
+      setCalendar(result);
+      showToast(
+        result.synced
+          ? `Google Calendar connected. ${result.synced} upcoming ${result.synced === 1 ? 'watch' : 'watches'} added.`
+          : 'Google Calendar connected. New watches will appear in it.',
+        'success',
+      );
+    } catch (err) {
+      showToast(err.message || 'Could not connect Google Calendar', 'error');
+    } finally {
+      setIsCalendarBusy(false);
+    }
+  };
+
+  const handleDisconnectCalendar = async () => {
+    try {
+      setCalendar(await disconnectCalendar(false));
+      showToast('Google Calendar disconnected. Existing events stay in Google.', 'info');
+    } catch (err) {
+      showToast(err.message || 'Could not disconnect', 'error');
+    }
+  };
 
   useEffect(() => {
     fetchLists();
@@ -483,26 +546,6 @@ export default function App() {
     }
   };
 
-  // 9. Seed Sample Data Handler
-  const handleSeedData = async () => {
-    try {
-      setIsSeeding(true);
-      const res = await seedSampleData();
-      if (res.lists) {
-        setLists(res.lists);
-      } else {
-        await fetchLists();
-      }
-      showToast('Sample movies & lists loaded successfully!', 'success');
-      await fetchAllMovies();
-    } catch (err) {
-      console.error('Seed error:', err);
-      showToast(err.message || 'Failed to seed sample data', 'error');
-    } finally {
-      setIsSeeding(false);
-    }
-  };
-
   // Switching sections always lands on that section's main view, never a stale detail page
   const selectSection = useCallback((section) => {
     setActiveSection(section);
@@ -680,6 +723,14 @@ export default function App() {
         onOpenTrash={() => setIsTrashOpen(true)}
         shortcuts={shortcuts}
         totalMoviesCount={totalAllCount}
+        user={authUser}
+        googleClientId={googleClientId}
+        onGoogleCredential={handleGoogleCredential}
+        onSignOut={handleSignOut}
+        calendar={calendar}
+        isCalendarBusy={isCalendarBusy}
+        onConnectCalendar={handleConnectCalendar}
+        onDisconnectCalendar={handleDisconnectCalendar}
       />
 
       {/* Library section */}
@@ -719,6 +770,8 @@ export default function App() {
 
       {/* Discover section: stays mounted while hidden so the bag, rounds and filters survive a trip to Library */}
       <Discover
+        key={authUser?.email || 'guest'}
+        userKey={authUser?.email || 'guest'}
         visible={activeSection === 'discover'}
         items={allMovies}
         lists={lists}

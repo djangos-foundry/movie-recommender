@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
@@ -18,6 +19,10 @@ class MovieList(models.Model):
     color = models.CharField(max_length=50, default='#f5c518')
     icon = models.CharField(max_length=50, default='Film')
     is_favourite = models.BooleanField(default=False)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.CASCADE, related_name='movie_lists',
+    )
     order = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
@@ -74,15 +79,28 @@ class ScheduledWatch(models.Model):
     A planned watch session for a library movie: 'watch Chennai Express on
     Saturday from 2:00 PM'. Kept deliberately close to a Google Calendar
     event's shape (summary/start/end/description) so pushing it to a real
-    Google Calendar later is a straight field mapping. google_event_id stays
-    empty until that sync exists.
+    Google Calendar later is a straight field mapping (services/gcal.py).
+    google_event_id stays empty until the owner connects Google Calendar.
     """
+    SYNC_CHOICES = [
+        ('not_synced', 'Not synced'),
+        ('synced', 'Synced'),
+        ('error', 'Error'),
+    ]
+
     movie = models.ForeignKey(Movie, on_delete=models.CASCADE, related_name='scheduled_watches')
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
     notes = models.TextField(blank=True, default='')
     is_watched = models.BooleanField(default=False)
     google_event_id = models.CharField(max_length=255, blank=True, default='')
+    sync_status = models.CharField(max_length=12, choices=SYNC_CHOICES, default='not_synced')
+    sync_error = models.TextField(blank=True, default='')
+    synced_at = models.DateTimeField(null=True, blank=True)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.CASCADE, related_name='scheduled_watches',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -121,3 +139,44 @@ class MovieListItem(models.Model):
 
     def __str__(self):
         return f"{self.movie.title} in {self.list.name} ({self.status})"
+
+
+class GoogleAccount(models.Model):
+    """Links a Django user to a Google identity. `sub` is Google's stable,
+    permanent id for the person (email can change, `sub` never does)."""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='google_account',
+    )
+    sub = models.CharField(max_length=255, unique=True)
+    email = models.EmailField(blank=True, default='')
+    name = models.CharField(max_length=255, blank=True, default='')
+    picture = models.URLField(max_length=500, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.email or self.sub
+
+
+class GoogleCalendarConnection(models.Model):
+    """
+    A user's link to their Google Calendar. We only ever write to the
+    dedicated "CineTrack" calendar this app created for them
+    (calendar.app.created scope); `calendar_id` is that calendar. The refresh
+    token is stored encrypted; access tokens are never stored.
+    """
+    STATUS_CHOICES = [
+        ('ok', 'Connected'),
+        ('broken', 'Needs reconnecting'),
+        ('disconnected', 'Disconnected'),
+    ]
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='calendar_connection',
+    )
+    refresh_token_enc = models.TextField()
+    calendar_id = models.CharField(max_length=255)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='ok')
+    connected_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user_id} -> {self.calendar_id} ({self.status})"

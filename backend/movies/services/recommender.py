@@ -61,7 +61,7 @@ def _cast_names(movie):
     }
 
 
-def _library_movies(list_id=None):
+def _library_movies(list_id=None, user=None):
     """
     Every distinct movie across the user's lists.
 
@@ -69,6 +69,10 @@ def _library_movies(list_id=None):
     filing habits from skewing the taste profile.
     """
     items = MovieListItem.objects.select_related('movie')
+    if user is not None and user.is_authenticated:
+        items = items.filter(list__owner=user)
+    else:
+        items = items.none()  # no signed-in/guest user: no library
     if list_id is not None:
         items = items.filter(list_id=list_id)
 
@@ -137,7 +141,7 @@ def apply_filters(movies, filters):
     return kept
 
 
-def get_filter_options(list_id=None):
+def get_filter_options(list_id=None, user=None):
     """
     Build the filter menu *from the user's own library*.
 
@@ -145,7 +149,7 @@ def get_filter_options(list_id=None):
     actually appear in the movies they saved, so no filter can produce an
     empty result by referring to something they do not own.
     """
-    movies = _library_movies(list_id)
+    movies = _library_movies(list_id, user)
 
     genres = Counter()
     directors = Counter()
@@ -193,7 +197,7 @@ def get_filter_options(list_id=None):
     }
 
 
-def build_taste_profile(list_id=None, filters=None):
+def build_taste_profile(list_id=None, filters=None, user=None):
     """
     Count how often each genre appears across the (optionally filtered) library.
 
@@ -202,7 +206,7 @@ def build_taste_profile(list_id=None, filters=None):
     a movie you own must never be recommended back, even if the current filter
     happens to exclude it.
     """
-    all_movies = _library_movies(list_id)
+    all_movies = _library_movies(list_id, user)
     filtered = apply_filters(all_movies, filters)
 
     genre_counter = Counter()
@@ -281,7 +285,7 @@ def _person_ids(movies, filters):
     return sorted(cast_ids), sorted(crew_ids)
 
 
-def get_recommendations(count=5, list_id=None, filters=None, rng=None):
+def get_recommendations(count=5, list_id=None, filters=None, rng=None, user=None):
     """
     Return `count` movies sampled without replacement from the genres of the
     user's filtered library.
@@ -293,7 +297,7 @@ def get_recommendations(count=5, list_id=None, filters=None, rng=None):
     filters = filters or {}
 
     genre_counter, library_tmdb_ids, filtered_size, total_size = build_taste_profile(
-        list_id, filters
+        list_id, filters, user
     )
 
     base = {
@@ -331,7 +335,7 @@ def get_recommendations(count=5, list_id=None, filters=None, rng=None):
         )
 
     # Constraints TMDB itself can honour, so results respect the filter too
-    filtered_movies = apply_filters(_library_movies(list_id), filters)
+    filtered_movies = apply_filters(_library_movies(list_id, user), filters)
     cast_ids, crew_ids = _person_ids(filtered_movies, filters)
     languages = _clean_list(filters.get('languages'))
 
@@ -407,3 +411,185 @@ def get_recommendations(count=5, list_id=None, filters=None, rng=None):
             if degraded else ""
         ),
     }
+
+
+def _filter_locally(movies, genres, criteria):
+    """Apply genre / excluded-genre / year / language / rating rules to a
+    ready-made list of movies (the discover call does this itself on TMDB)."""
+    wanted = {g.lower() for g in genres}
+    banned = {g.lower() for g in criteria.get("exclude_genres") or []}
+    kept = []
+    for movie in movies:
+        have = {g.lower() for g in movie.get("genres", [])}
+        if wanted and not wanted & have:
+            continue
+        if banned & have:
+            continue
+        year = (movie.get("release_date") or "")[:4]
+        if year.isdigit():
+            if criteria.get("year_min") and int(year) < int(criteria["year_min"]):
+                continue
+            if criteria.get("year_max") and int(year) > int(criteria["year_max"]):
+                continue
+        elif criteria.get("year_min") or criteria.get("year_max"):
+            continue
+        language = criteria.get("language")
+        if language and movie.get("original_language") != language:
+            continue
+        if criteria.get("min_rating") and movie.get("vote_average", 0) < float(criteria["min_rating"]):
+            continue
+        kept.append(movie)
+    return kept
+
+
+def get_web_recommendations(count=5, filters=None, rng=None, user=None):
+    """
+    Open-vocabulary web search: pull straight from TMDB using the given
+    criteria, excluding anything already in ANY of the user's lists.
+
+    Unlike get_recommendations, this never requires an already-owned movie
+    to match the filters first - that's the whole point of Web + Ask. Its
+    filters come from the chat parser (services/chat.py
+    parse_open_vocabulary), which can name a language, year or person that
+    nothing in the library resembles yet; get_recommendations would reject
+    that as "no movies in your library match", which is the wrong message
+    for "find something new". Only the chat endpoint calls this - the
+    ordinary Web-source random draw keeps using get_recommendations, whose
+    taste-profile seeding from the library is intentional there.
+    """
+    rng = rng or random
+    filters = filters or {}
+
+    library_tmdb_ids = {m.tmdb_id for m in _library_movies(None, user)}
+
+    genres = _clean_list(filters.get("genres"))
+    criteria = {
+        "language": filters.get("language"),
+        "year_min": filters.get("year_min"),
+        "year_max": filters.get("year_max"),
+        "runtime_max": filters.get("runtime_max"),
+        "min_rating": filters.get("min_rating"),
+        "cast_ids": filters.get("cast_ids") or [],
+        "crew_ids": filters.get("crew_ids") or [],
+        "company_ids": filters.get("company_ids") or [],
+        "keyword_ids": filters.get("keyword_ids") or [],
+        "exclude_genres": _clean_list(filters.get("exclude_genres")),
+    }
+
+    # A named franchise ("insidious") is a fixed set of movies, not a filter:
+    # list its films in release order instead of sampling at random.
+    collection_ids = filters.get("collection_ids") or []
+    if collection_ids:
+        franchise = {}
+        for collection_id in collection_ids:
+            for movie in tmdb_service.get_collection_movies(collection_id):
+                year = (movie.get("release_date") or "")[:4]
+                if year.isdigit():
+                    if criteria["year_min"] and int(year) < int(criteria["year_min"]):
+                        continue
+                    if criteria["year_max"] and int(year) > int(criteria["year_max"]):
+                        continue
+                if movie["tmdb_id"] not in library_tmdb_ids:
+                    franchise.setdefault(movie["tmdb_id"], movie)
+        listed = sorted(franchise.values(), key=lambda m: m.get("release_date") or "9999")
+        if listed:
+            return {"results": listed[:count], "degraded": False, "pool_size": len(listed), "message": ""}
+        return {
+            "results": [], "degraded": False, "pool_size": 0,
+            "message": "You already own everything in that franchise, or TMDB lists nothing for it.",
+        }
+
+    # "movies like X": TMDB's own recommendations for that title. Sampled so
+    # asking again shows different ones; the movie itself and anything the
+    # user owns are skipped; a year filter still applies.
+    similar = filters.get("similar_to")
+    if similar:
+        related = {}
+        for movie in tmdb_service.get_similar_movies(similar["id"]):
+            year = (movie.get("release_date") or "")[:4]
+            if year.isdigit():
+                if criteria["year_min"] and int(year) < int(criteria["year_min"]):
+                    continue
+                if criteria["year_max"] and int(year) > int(criteria["year_max"]):
+                    continue
+            if movie["tmdb_id"] != similar["id"] and movie["tmdb_id"] not in library_tmdb_ids:
+                related.setdefault(movie["tmdb_id"], movie)
+        if not related:
+            return {
+                "results": [], "degraded": False, "pool_size": 0,
+                "message": f"TMDB has no recommendations for {similar['title']} that you don't already own.",
+            }
+        # TMDB lists these most relevant first and quality falls off quickly,
+        # so vary the picks only within the top of the list
+        candidates = list(related.values())[:15]
+        picks = rng.sample(candidates, min(count, len(candidates)))
+        return {"results": picks, "degraded": False, "pool_size": len(candidates), "message": ""}
+
+    # Sources TMDB can't filter itself - one of its ready-made lists (trending,
+    # now playing, ...) or a director's own directing credits. They are fetched
+    # whole and filtered here with the same rules the discover call applies.
+    list_kind = filters.get("list_kind")
+    director_ids = filters.get("director_ids") or []
+    if list_kind or director_ids:
+        if list_kind:
+            source = tmdb_service.get_movie_list(list_kind)
+        else:
+            source = [
+                m for person_id in director_ids
+                for m in tmdb_service.get_director_movies(person_id)
+                if m["vote_count"] >= 10
+            ]
+        kept = {
+            m["tmdb_id"]: m for m in _filter_locally(source, genres, criteria)
+            if m["tmdb_id"] not in library_tmdb_ids
+        }
+        candidates = list(kept.values())
+        if list_kind:
+            candidates = candidates[:20]  # TMDB ranks these; stay near the top
+        if not candidates:
+            return {
+                "results": [], "degraded": not source, "pool_size": 0,
+                "message": (
+                    "Could not reach TMDB just now. Check your connection and try again."
+                    if not source else "Nothing there matched that. Try loosening it."
+                ),
+            }
+        picks = rng.sample(candidates, min(count, len(candidates)))
+        return {"results": picks, "degraded": False, "pool_size": len(candidates), "message": ""}
+
+    # A narrow, specific ask (a language + a near year, say) has a small
+    # real candidate pool - a high popularity/vote-count bar would often
+    # empty it out entirely, so this uses a much lower floor than the
+    # ordinary random draw does.
+    pool = {}
+    discover_status = {}
+    for page in (1, 2):
+        candidates = tmdb_service.discover_movies(
+            genre_names=genres, page=page, min_votes=10, criteria=criteria,
+            status_out=discover_status,
+        )
+        for candidate in candidates:
+            tmdb_id = candidate.get("tmdb_id") or candidate.get("id")
+            if not tmdb_id or tmdb_id in library_tmdb_ids:
+                continue
+            pool.setdefault(tmdb_id, candidate)
+        if not candidates:
+            break
+
+    degraded = bool(discover_status.get("degraded"))
+
+    if not pool:
+        return {
+            "results": [],
+            "degraded": degraded,
+            "pool_size": 0,
+            "message": (
+                "Could not reach TMDB just now. Check your connection and try again."
+                if degraded else
+                "Nothing on TMDB matched that. Try loosening it."
+            ),
+        }
+
+    candidates = list(pool.values())
+    picks = rng.sample(candidates, min(count, len(candidates)))
+    return {"results": picks, "degraded": degraded, "pool_size": len(candidates), "message": ""}

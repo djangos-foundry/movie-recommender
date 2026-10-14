@@ -325,6 +325,26 @@ body {
   margin-top: 1px;
 }
 
+.activity-rail__guest {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-faint);
+}
+
+.activity-rail__guest-text {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.activity-rail__google {
+  margin: 4px 0;
+  min-height: 40px;
+  color-scheme: light;
+}
+
 .activity-rail__popover-stat {
   display: flex;
   align-items: center;
@@ -354,7 +374,15 @@ body {
   transition: all 0.13s;
 }
 
-.activity-rail__popover-btn:hover {
+.activity-rail__popover-btn:disabled {
+  cursor: default;
+}
+
+.activity-rail__popover-btn--quiet {
+  color: var(--text-muted);
+}
+
+.activity-rail__popover-btn:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text-primary);
 }

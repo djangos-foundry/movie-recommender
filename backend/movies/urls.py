@@ -1,4 +1,8 @@
 from django.urls import path
+from .auth_views import MeView, GoogleLoginView, LogoutView
+from .calendar_views import (
+    CalendarStatusView, CalendarConnectView, CalendarSyncView, CalendarDisconnectView,
+)
 from .views import (
     MovieListIndexView,
     MovieListReorderView,
@@ -7,7 +11,6 @@ from .views import (
     MovieListItemDetailView,
     TMDBSearchView,
     TMDBMovieDetailView,
-    SeedDataView,
     RecommendationView,
     RecommendationFiltersView,
     ChatRecommendView,
@@ -19,6 +22,17 @@ from .views import (
 )
 
 urlpatterns = [
+    # Accounts
+    path('auth/me/', MeView.as_view(), name='auth-me'),
+    path('auth/google/', GoogleLoginView.as_view(), name='auth-google'),
+    path('auth/logout/', LogoutView.as_view(), name='auth-logout'),
+
+    # Google Calendar sync
+    path('calendar/status/', CalendarStatusView.as_view(), name='calendar-status'),
+    path('calendar/connect/', CalendarConnectView.as_view(), name='calendar-connect'),
+    path('calendar/sync/', CalendarSyncView.as_view(), name='calendar-sync'),
+    path('calendar/disconnect/', CalendarDisconnectView.as_view(), name='calendar-disconnect'),
+
     # Lists
     path('lists/', MovieListIndexView.as_view(), name='movie-list-index'),
     path('lists/reorder/', MovieListReorderView.as_view(), name='movie-list-reorder'),
@@ -43,8 +57,6 @@ urlpatterns = [
     path('schedule/', ScheduledWatchListCreateView.as_view(), name='schedule-index'),
     path('schedule/<int:pk>/', ScheduledWatchDetailView.as_view(), name='schedule-detail'),
 
-    # Seed Database
-    path('seed/', SeedDataView.as_view(), name='seed-data'),
 
     # Trash (soft-deleted lists and list-items, 30-day retention)
     path('trash/', TrashView.as_view(), name='trash-index'),

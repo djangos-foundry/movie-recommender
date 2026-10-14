@@ -1,0 +1,4 @@
+# HTTPS reverse proxy (auto Let's Encrypt). Replace with your domain.
+cinetrack.example.com {
+    reverse_proxy 127.0.0.1:8000
+}

@@ -1,17 +1,32 @@
 // API Client for Movie Recommendation & Tracking
 // Base URL pointing to Django backend
-const API_BASE = 'http://localhost:8000/api';
+// Same hostname as the page, so the session cookie is sent (localhost and
+// 127.0.0.1 are different sites to the browser).
+const API_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+// In production Django serves the UI and the API from the same origin.
+const API_BASE = import.meta.env.PROD ? '/api' : `http://${API_HOST}:8000/api`;
+
+let csrfToken = '';
+
+function readCsrfCookie() {
+  const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : '';
+}
 
 /**
  * Helper to handle fetch requests with timeout and helpful fallback error handling
  */
 async function fetchJson(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
+  const method = (options.method || 'GET').toUpperCase();
   const config = {
     ...options,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json',
+      // Django rotates the CSRF cookie when a session starts, so prefer the cookie
+      ...(method === 'GET' ? {} : { 'X-CSRFToken': readCsrfCookie() || csrfToken }),
       ...(options.headers || {}),
     },
   };
@@ -168,13 +183,6 @@ export async function sendChatMessage(message, history = [], listId = null, coun
   });
 }
 
-// 7. Seed sample data
-export async function seedSampleData() {
-  return await fetchJson('/seed/', {
-    method: 'POST',
-  });
-}
-
 // 8. Schedule (calendar of planned watch sessions)
 export async function getScheduledWatches({ start, end } = {}) {
   const params = new URLSearchParams();
@@ -231,4 +239,47 @@ export async function permanentlyDeleteTrashEntry(kind, id) {
   return await fetchJson(`/trash/${kind}/${id}/`, {
     method: 'DELETE',
   });
+}
+
+// 10. Accounts (Google sign-in)
+export async function getMe() {
+  const data = await fetchJson('/auth/me/');
+  csrfToken = data.csrf_token || csrfToken;
+  return data; // { user: null | {name, email, picture}, google_client_id }
+}
+
+export async function loginWithGoogle(credential) {
+  const data = await fetchJson('/auth/google/', {
+    method: 'POST',
+    body: JSON.stringify({ credential }),
+  });
+  csrfToken = data.csrf_token || csrfToken;
+  return data;
+}
+
+// 11. Google Calendar sync
+export async function getCalendarStatus() {
+  return await fetchJson('/calendar/status/');
+}
+
+export async function connectCalendar(code, timeZone) {
+  return await fetchJson('/calendar/connect/', {
+    method: 'POST',
+    body: JSON.stringify({ code, time_zone: timeZone }),
+  });
+}
+
+export async function syncCalendar() {
+  return await fetchJson('/calendar/sync/', { method: 'POST' });
+}
+
+export async function disconnectCalendar(deleteCalendar = false) {
+  return await fetchJson('/calendar/disconnect/', {
+    method: 'POST',
+    body: JSON.stringify({ delete_calendar: deleteCalendar }),
+  });
+}
+
+export async function logout() {
+  return await fetchJson('/auth/logout/', { method: 'POST' });
 }
