@@ -183,19 +183,6 @@ export async function sendChatMessage(message, history = [], listId = null, coun
   });
 }
 
-// 7. Seed sample data
-// Concurrent calls share one request: two simultaneous first-visit seeds would
-// each start their own guest session (and collide on the SQLite write lock).
-let seedInFlight = null;
-export function seedSampleData() {
-  if (!seedInFlight) {
-    seedInFlight = fetchJson('/seed/', { method: 'POST' }).finally(() => {
-      seedInFlight = null;
-    });
-  }
-  return seedInFlight;
-}
-
 // 8. Schedule (calendar of planned watch sessions)
 export async function getScheduledWatches({ start, end } = {}) {
   const params = new URLSearchParams();

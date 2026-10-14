@@ -21,7 +21,6 @@ import {
   addMovieToList,
   updateListItem,
   removeListItem,
-  seedSampleData,
   getTMDBMovie,
   getMe,
   loginWithGoogle,
@@ -79,7 +78,6 @@ export default function App() {
   // Loading & Network state
   const [isLoadingLists, setIsLoadingLists] = useState(true);
   const [isLoadingMovies, setIsLoadingMovies] = useState(false);
-  const [isSeeding, setIsSeeding] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [backendError, setBackendError] = useState(null);
 
@@ -124,18 +122,6 @@ export default function App() {
       const data = await getLists();
       const listData = Array.isArray(data) ? data : [];
       setLists(listData);
-
-      // If no lists exist, try auto-seeding once
-      if (listData.length === 0) {
-        try {
-          const seeded = await seedSampleData();
-          if (seeded && seeded.lists) {
-            setLists(seeded.lists);
-          }
-        } catch (seedErr) {
-          console.warn('Auto-seed attempt:', seedErr);
-        }
-      }
     } catch (err) {
       console.error('Error fetching lists:', err);
       setBackendError(
@@ -557,26 +543,6 @@ export default function App() {
     } catch (err) {
       console.error('Failed to remove item:', err);
       showToast('Failed to remove movie', 'error');
-    }
-  };
-
-  // 9. Seed Sample Data Handler
-  const handleSeedData = async () => {
-    try {
-      setIsSeeding(true);
-      const res = await seedSampleData();
-      if (res.lists) {
-        setLists(res.lists);
-      } else {
-        await fetchLists();
-      }
-      showToast('Sample movies & lists loaded successfully!', 'success');
-      await fetchAllMovies();
-    } catch (err) {
-      console.error('Seed error:', err);
-      showToast(err.message || 'Failed to seed sample data', 'error');
-    } finally {
-      setIsSeeding(false);
     }
   };
 

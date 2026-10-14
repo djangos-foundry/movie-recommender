@@ -11,7 +11,6 @@ from .views import (
     MovieListItemDetailView,
     TMDBSearchView,
     TMDBMovieDetailView,
-    SeedDataView,
     RecommendationView,
     RecommendationFiltersView,
     ChatRecommendView,
@@ -58,8 +57,6 @@ urlpatterns = [
     path('schedule/', ScheduledWatchListCreateView.as_view(), name='schedule-index'),
     path('schedule/<int:pk>/', ScheduledWatchDetailView.as_view(), name='schedule-detail'),
 
-    # Seed Database
-    path('seed/', SeedDataView.as_view(), name='seed-data'),
 
     # Trash (soft-deleted lists and list-items, 30-day retention)
     path('trash/', TrashView.as_view(), name='trash-index'),
