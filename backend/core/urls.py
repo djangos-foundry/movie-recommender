@@ -1,7 +1,19 @@
+from django.conf import settings
 from django.contrib import admin
-from django.urls import path, include
+from django.http import FileResponse, Http404
+from django.urls import path, include, re_path
+
+
+def spa_index(request, *args, **kwargs):
+    """Serve the built React app for any non-API path (client-side routing)."""
+    index = settings.FRONTEND_DIST / 'index.html'
+    if not index.is_file():
+        raise Http404('Frontend not built. Run "npm run build".')
+    return FileResponse(open(index, 'rb'), content_type='text/html')
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('movies.urls')),
+    re_path(r'^(?!api/|admin/|static/).*$', spa_index),
 ]

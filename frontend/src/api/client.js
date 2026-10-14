@@ -3,7 +3,8 @@
 // Same hostname as the page, so the session cookie is sent (localhost and
 // 127.0.0.1 are different sites to the browser).
 const API_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-const API_BASE = `http://${API_HOST}:8000/api`;
+// In production Django serves the UI and the API from the same origin.
+const API_BASE = import.meta.env.PROD ? '/api' : `http://${API_HOST}:8000/api`;
 
 let csrfToken = '';
 

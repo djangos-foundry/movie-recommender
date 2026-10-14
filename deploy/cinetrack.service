@@ -1,0 +1,14 @@
+# Install: sudo cp deploy/cinetrack.service /etc/systemd/system/ && sudo systemctl enable --now cinetrack
+[Unit]
+Description=CineTrack (Django + gunicorn)
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/movie-recommender/backend
+EnvironmentFile=/home/ubuntu/movie-recommender/backend/.env
+ExecStart=/home/ubuntu/movie-recommender/.venv/bin/gunicorn core.wsgi:application --bind 127.0.0.1:8000 --workers 2
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
