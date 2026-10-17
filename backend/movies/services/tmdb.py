@@ -449,7 +449,9 @@ def normalize_genres(raw_genres, genre_ids=None):
 
 
 class TMDBService:
-    BASE_URL = "https://api.themoviedb.org/3"
+    # TMDB's documented alternate API host. From Oracle Cloud, api.themoviedb.org
+    # drops ~60% of connections while api.tmdb.org does not.
+    BASE_URL = "https://api.tmdb.org/3"
 
     def __init__(self, api_key=None):
         self.api_key = api_key or getattr(settings, "TMDB_API_KEY", "")
