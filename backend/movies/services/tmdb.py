@@ -1,8 +1,18 @@
 import logging
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+# One shared session: reuses connections and retries dropped ones. From some
+# hosts (e.g. Oracle Cloud) roughly half of fresh TLS connections to TMDB get
+# reset, which would otherwise silently fall back to mock data.
+_http = requests.Session()
+_http.mount("https://", HTTPAdapter(max_retries=Retry(
+    total=3, connect=3, read=3, backoff_factor=0.2, allowed_methods=["GET"],
+)))
 
 TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
 
@@ -450,7 +460,7 @@ class TMDBService:
 
         if self.api_key:
             try:
-                response = requests.get(
+                response = _http.get(
                     f"{self.BASE_URL}/search/movie",
                     params={
                         "api_key": self.api_key,
@@ -517,7 +527,7 @@ class TMDBService:
             return []
 
         try:
-            response = requests.get(
+            response = _http.get(
                 f"{self.BASE_URL}/search/person",
                 params={"api_key": self.api_key, "query": clean_query, "include_adult": False},
                 timeout=4,
@@ -546,7 +556,7 @@ class TMDBService:
         if not clean_query or not self.api_key:
             return []
         try:
-            response = requests.get(
+            response = _http.get(
                 f"{self.BASE_URL}{path}",
                 params={"api_key": self.api_key, "query": clean_query},
                 timeout=4,
@@ -616,7 +626,7 @@ class TMDBService:
         movies = []
         for page in range(1, pages + 1):
             try:
-                response = requests.get(
+                response = _http.get(
                     f"{self.BASE_URL}{path}",
                     params={"api_key": self.api_key, "page": page},
                     timeout=5,
@@ -641,7 +651,7 @@ class TMDBService:
         if not self.api_key or not person_id:
             return []
         try:
-            response = requests.get(
+            response = _http.get(
                 f"{self.BASE_URL}/person/{int(person_id)}/movie_credits",
                 params={"api_key": self.api_key},
                 timeout=5,
@@ -672,7 +682,7 @@ class TMDBService:
             items = []
             for page in range(1, pages + 1):
                 try:
-                    response = requests.get(
+                    response = _http.get(
                         f"{self.BASE_URL}/movie/{int(movie_id)}/{kind}",
                         params={"api_key": self.api_key, "page": page},
                         timeout=5,
@@ -720,7 +730,7 @@ class TMDBService:
         if with_companies:
             params["with_companies"] = with_companies
         try:
-            response = requests.get(f"{self.BASE_URL}/discover/movie", params=params, timeout=4)
+            response = _http.get(f"{self.BASE_URL}/discover/movie", params=params, timeout=4)
             return response.status_code == 200 and response.json().get("total_results", 0) > 0
         except Exception as e:
             logger.warning("TMDB has_movies check failed (%s).", e)
@@ -731,7 +741,7 @@ class TMDBService:
         if not self.api_key or not collection_id:
             return []
         try:
-            response = requests.get(
+            response = _http.get(
                 f"{self.BASE_URL}/collection/{int(collection_id)}",
                 params={"api_key": self.api_key},
                 timeout=5,
@@ -773,7 +783,7 @@ class TMDBService:
 
         if self.api_key:
             try:
-                response = requests.get(
+                response = _http.get(
                     f"{self.BASE_URL}/movie/{tmdb_id_int}",
                     params={"api_key": self.api_key, "append_to_response": "credits"},
                     timeout=5,
@@ -969,7 +979,7 @@ class TMDBService:
             last_error = None
             for attempt in range(max(1, attempts)):
                 try:
-                    response = requests.get(
+                    response = _http.get(
                         f"{self.BASE_URL}/discover/movie",
                         params=params,
                         timeout=6,
