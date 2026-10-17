@@ -32,3 +32,4 @@ build/
 .claude/
 .DS_Store
 Thumbs.db
+.docs/
