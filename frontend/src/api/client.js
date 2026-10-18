@@ -101,8 +101,18 @@ export async function getListMovies(listId) {
   return await fetchJson(`/lists/${listId}/movies/`);
 }
 
+// Pseudo list id for "no list": the movie goes into the hidden Library, which
+// still shows up under All Movies.
+export const LIBRARY = 'library';
+
+// Every movie the user has, across all lists and the hidden Library
+export async function getLibraryMovies() {
+  return await fetchJson('/library/movies/');
+}
+
 export async function addMovieToList(listId, movieData, status = 'plan_to_watch', userRating = null, userNotes = '') {
-  return await fetchJson(`/lists/${listId}/movies/`, {
+  const path = !listId || listId === LIBRARY ? '/library/movies/' : `/lists/${listId}/movies/`;
+  return await fetchJson(path, {
     method: 'POST',
     body: JSON.stringify({
       tmdb_id: movieData.tmdb_id || movieData.id,

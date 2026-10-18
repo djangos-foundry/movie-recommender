@@ -4,7 +4,7 @@ import '../discover.css';
 import DiscoverSidebar from './discover/DiscoverSidebar';
 import DiscoverFilters from './discover/DiscoverFilters';
 import DiscoverCard from './discover/DiscoverCard';
-import { getRecommendations, sendChatMessage } from '../api/client';
+import { getRecommendations, sendChatMessage, LIBRARY } from '../api/client';
 import { loadJson, saveJson } from '../lib/prefs';
 import {
   EMPTY_FILTERS,
@@ -337,14 +337,10 @@ export default function Discover({
   };
 
   const addWebMovie = async (movie) => {
-    if (!defaultListId) {
-      setMessage({ text: 'Create a list first, then add movies to it.', tone: 'error' });
-      return;
-    }
     try {
       setAddingKey(movie.tmdb_id);
       // Add quietly (App shows a toast); the card flips to "In library" without leaving Discover
-      await onAddMovie?.(defaultListId, movie, { openDetail: false });
+      await onAddMovie?.(defaultListId ?? LIBRARY, movie, { openDetail: false });
       // No longer a candidate once it is in a list
       removeShortlisted({ source: 'web', key: movie.tmdb_id });
     } catch (err) {

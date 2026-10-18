@@ -8,6 +8,7 @@ from .views import (
     MovieListReorderView,
     MovieListDetailView,
     MovieListMoviesView,
+    LibraryMoviesView,
     MovieListItemDetailView,
     TMDBSearchView,
     TMDBMovieDetailView,
@@ -38,6 +39,9 @@ urlpatterns = [
     path('lists/reorder/', MovieListReorderView.as_view(), name='movie-list-reorder'),
     path('lists/<int:pk>/', MovieListDetailView.as_view(), name='movie-list-detail'),
     path('lists/<int:pk>/movies/', MovieListMoviesView.as_view(), name='movie-list-movies'),
+
+    # Library (all movies, plus adding without a list)
+    path('library/movies/', LibraryMoviesView.as_view(), name='library-movies'),
 
     # List items
     path('list-items/<int:pk>/', MovieListItemDetailView.as_view(), name='movie-list-item-detail'),

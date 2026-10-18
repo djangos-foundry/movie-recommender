@@ -17,7 +17,7 @@ import {
   updateList,
   reorderLists,
   deleteList,
-  getListMovies,
+  getLibraryMovies,
   addMovieToList,
   updateListItem,
   removeListItem,
@@ -208,31 +208,14 @@ export default function App() {
     fetchLists();
   }, [fetchLists]);
 
-  // 2. Fetch all movies across all lists
+  // 2. Fetch all movies: every list plus the hidden Library, in one request
   const fetchAllMovies = useCallback(async () => {
     if (backendError && lists.length === 0) return;
 
     try {
       setIsLoadingMovies(true);
-      const all = [];
-      const seenItemIds = new Set();
-
-      for (const list of lists) {
-        try {
-          const items = await getListMovies(list.id);
-          if (Array.isArray(items)) {
-            for (const item of items) {
-              if (!seenItemIds.has(item.id)) {
-                seenItemIds.add(item.id);
-                all.push(item);
-              }
-            }
-          }
-        } catch (e) {
-          console.warn(`Could not load movies for list ${list.id}:`, e);
-        }
-      }
-      setAllMovies(all);
+      const items = await getLibraryMovies();
+      setAllMovies(Array.isArray(items) ? items : []);
     } catch (err) {
       console.error('Error fetching movies:', err);
       showToast('Could not load movies', 'error');
@@ -241,10 +224,10 @@ export default function App() {
     }
   }, [lists, backendError]);
 
+  // Re-runs whenever the lists change (a list deleted or restored changes
+  // what All Movies contains), and works with zero lists too.
   useEffect(() => {
-    if (lists.length > 0) {
-      fetchAllMovies();
-    }
+    fetchAllMovies();
   }, [lists, fetchAllMovies]);
 
   // Keep selectedItem in sync if allMovies updates

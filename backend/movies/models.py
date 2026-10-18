@@ -19,6 +19,9 @@ class MovieList(models.Model):
     color = models.CharField(max_length=50, default='#f5c518')
     icon = models.CharField(max_length=50, default='Film')
     is_favourite = models.BooleanField(default=False)
+    # The hidden per-user "Library" list: holds movies added without picking a
+    # list. Never shown in the lists sidebar and cannot be renamed or deleted.
+    is_system = models.BooleanField(default=False)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True,
         on_delete=models.CASCADE, related_name='movie_lists',

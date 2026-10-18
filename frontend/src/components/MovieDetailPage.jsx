@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { LIBRARY } from '../api/client';
 import {
   ArrowLeft,
   Star,
@@ -71,7 +72,8 @@ export default function MovieDetailPage({
 
   // Preview mode defaults the destination list to "Plan to Watch"
   useEffect(() => {
-    if (!isPreview || lists.length === 0) return;
+    if (!isPreview) return;
+    if (lists.length === 0) { setTargetListId(LIBRARY); return; }
     const plan = lists.find((l) => (l.name || '').toLowerCase().trim() === 'plan to watch');
     setTargetListId(String((plan || lists[0]).id));
   }, [isPreview, lists]);
@@ -186,6 +188,7 @@ export default function MovieDetailPage({
               {lists.map((l) => (
                 <option key={l.id} value={l.id}>{l.name}</option>
               ))}
+              <option value={LIBRARY}>Library (no list)</option>
             </select>
             <button
               type="button"

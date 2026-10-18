@@ -379,3 +379,58 @@ class CalendarSyncTests(APITestCase):
              patch('movies.services.gcal._call', side_effect=lambda *a, **k: next(replies)):
             res = self.client_a.post('/api/calendar/connect/', {'code': 'c'}, format='json').json()
         self.assertEqual((res['synced'], res['failed']), (1, 0))
+
+
+class LibraryWithoutListsTests(APITestCase):
+    """Adding a movie must work for a user who has no lists at all."""
+
+    MOVIE = {'tmdb_id': 604, 'title': 'Test Movie', 'overview': 'x', 'cast': [{'name': 'A'}], 'director': 'D'}
+
+    def add(self, client, **extra):
+        with patch.object(tmdb_service, 'get_movie_details', return_value=None):
+            return client.post('/api/library/movies/', {**self.MOVIE, **extra}, format='json')
+
+    def test_add_with_no_lists_shows_in_all_movies(self):
+        c = APIClient()
+        self.assertEqual(c.get('/api/lists/').json(), [])
+        res = self.add(c)
+        self.assertEqual(res.status_code, 201)
+        library = c.get('/api/library/movies/').json()
+        self.assertEqual([i['movie']['tmdb_id'] for i in library], [604])
+        self.assertEqual(library[0]['status'], 'plan_to_watch')
+
+    def test_library_list_is_hidden_and_protected(self):
+        c = APIClient()
+        self.add(c)
+        self.assertEqual(c.get('/api/lists/').json(), [])
+        library_id = c.get('/api/library/movies/').json()[0]['list']
+        self.assertEqual(c.get(f'/api/lists/{library_id}/').status_code, 404)
+        self.assertEqual(c.delete(f'/api/lists/{library_id}/').status_code, 404)
+
+    def test_adding_twice_reuses_one_library_and_rejects_duplicate(self):
+        c = APIClient()
+        self.assertEqual(self.add(c).status_code, 201)
+        self.assertEqual(self.add(c).status_code, 400)
+        self.assertEqual(MovieList.all_objects.filter(is_system=True).count(), 1)
+
+    def test_all_movies_merges_library_and_custom_lists(self):
+        c = APIClient()
+        self.add(c)
+        lst = c.post('/api/lists/', {'name': 'Mine'}, format='json').json()
+        with patch.object(tmdb_service, 'get_movie_details', return_value=None):
+            c.post(f"/api/lists/{lst['id']}/movies/", {**self.MOVIE, 'tmdb_id': 605, 'title': 'Other'}, format='json')
+        ids = sorted(i['movie']['tmdb_id'] for i in c.get('/api/library/movies/').json())
+        self.assertEqual(ids, [604, 605])
+        # A trashed list's movies drop out of All Movies, like before
+        c.delete(f"/api/lists/{lst['id']}/")
+        ids = [i['movie']['tmdb_id'] for i in c.get('/api/library/movies/').json()]
+        self.assertEqual(ids, [604])
+
+    def test_library_is_private_per_user(self):
+        a, b = APIClient(), APIClient()
+        self.add(a)
+        self.assertEqual(b.get('/api/library/movies/').json(), [])
+        self.assertEqual(a.get('/api/library/movies/').status_code, 200)
+
+    def test_visitor_with_no_session_sees_empty_library(self):
+        self.assertEqual(APIClient().get('/api/library/movies/').json(), [])

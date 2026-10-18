@@ -26,6 +26,15 @@ from .services import gcal
 from .services.chat import parse_open_vocabulary, _RANDOM_RE
 
 
+def get_library_list(user):
+    """The user's hidden Library list, created on first use. A guest merged into
+    an existing account can briefly leave two; the oldest wins."""
+    library = MovieList.objects.filter(owner=user, is_system=True).order_by('id').first()
+    if library is None:
+        library = MovieList.objects.create(owner=user, name='Library', is_system=True, order=-1)
+    return library
+
+
 class MovieListIndexView(ListCreateAPIView):
     """
     GET /api/lists/ - List all lists with item counts.
@@ -34,7 +43,7 @@ class MovieListIndexView(ListCreateAPIView):
     serializer_class = MovieListSerializer
 
     def get_queryset(self):
-        qs = MovieList.objects.annotate(items_count=Count('items')).order_by('order', 'created_at')
+        qs = MovieList.objects.filter(is_system=False).annotate(items_count=Count('items')).order_by('order', 'created_at')
         return owned(qs, self.request)
 
     def perform_create(self, serializer):
@@ -68,7 +77,7 @@ class MovieListDetailView(RetrieveUpdateDestroyAPIView):
     serializer_class = MovieListSerializer
 
     def get_queryset(self):
-        return owned(MovieList.objects.annotate(items_count=Count('items')), self.request)
+        return owned(MovieList.objects.filter(is_system=False).annotate(items_count=Count('items')), self.request)
 
     def perform_destroy(self, instance):
         instance.deleted_at = timezone.now()
@@ -81,14 +90,17 @@ class MovieListMoviesView(APIView):
     POST /api/lists/<int:pk>/movies/ - Add a movie to this list.
     """
 
+    def get_movie_list(self, request, pk):
+        return get_object_or_404(owned(MovieList.objects.all(), request), pk=pk)
+
     def get(self, request, pk):
-        movie_list = get_object_or_404(owned(MovieList.objects.all(), request), pk=pk)
+        movie_list = self.get_movie_list(request, pk)
         items = movie_list.items.select_related('movie').filter(deleted_at__isnull=True)
         serializer = MovieListItemSerializer(items, many=True)
         return Response(serializer.data)
 
     def post(self, request, pk):
-        movie_list = get_object_or_404(owned(MovieList.objects.all(), request), pk=pk)
+        movie_list = self.get_movie_list(request, pk)
         serializer = AddMovieToListSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -214,6 +226,30 @@ class MovieListMoviesView(APIView):
             MovieListItemSerializer(item).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class LibraryMoviesView(MovieListMoviesView):
+    """
+    GET /api/library/movies/ - Every movie the user has, across all their lists
+        and the hidden Library (this is what "All Movies" shows).
+    POST /api/library/movies/ - Add a movie without choosing a list; it goes
+        into the hidden Library list.
+    """
+
+    def get_movie_list(self, request, pk):
+        return get_library_list(request.user)
+
+    def get(self, request):
+        items = (
+            owned(MovieListItem.objects.select_related('list', 'movie'), request, 'list__owner')
+            .filter(list__deleted_at__isnull=True)
+        )
+        return Response(MovieListItemSerializer(items, many=True).data)
+
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return Response({"error": "No session."}, status=status.HTTP_401_UNAUTHORIZED)
+        return super().post(request, pk=None)
 
 
 class MovieListItemDetailView(RetrieveUpdateDestroyAPIView):

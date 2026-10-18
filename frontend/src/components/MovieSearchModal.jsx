@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, Star, Plus, Check, Loader2, Film } from 'lucide-react';
-import { searchTMDB } from '../api/client';
+import { searchTMDB, LIBRARY } from '../api/client';
 
 // Inline TMDB logo SVG (official blue T badge)
 function TmdbBadge() {
@@ -34,6 +34,8 @@ export default function MovieSearchModal({
     } else if (lists.length > 0) {
       const def = lists.find((l) => l.name.toLowerCase() === 'watchlist') || lists[0];
       setTargetListId(def.id);
+    } else {
+      setTargetListId(LIBRARY);
     }
   }, [currentList, lists]);
 
@@ -63,8 +65,7 @@ export default function MovieSearchModal({
   if (!isOpen) return null;
 
   const handleAdd = async (movie) => {
-    const listId = targetListId || lists[0]?.id;
-    if (!listId) { setError('Please select a list first'); return; }
+    const listId = targetListId || lists[0]?.id || LIBRARY;
     try {
       setAddingId(movie.id); setError('');
       await onAddMovie(listId, movie);
@@ -78,7 +79,7 @@ export default function MovieSearchModal({
 
   const getYear = (d) => d?.substring(0, 4) || '';
 
-  const targetListName = lists.find((l) => String(l.id) === String(targetListId))?.name || 'Select a list';
+  const targetListName = lists.find((l) => String(l.id) === String(targetListId))?.name || 'Library';
 
   return (
     <div className="modal-overlay">
@@ -102,6 +103,7 @@ export default function MovieSearchModal({
                   {lists.map((l) => (
                     <option key={l.id} value={l.id}>{l.name}</option>
                   ))}
+                  <option value={LIBRARY}>Library (no list)</option>
                 </select>
                 <span className="amm__list-select-caret">▾</span>
               </div>

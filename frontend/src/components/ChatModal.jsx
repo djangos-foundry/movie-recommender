@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X, Star, Plus, Check, Loader2, Film, Send, MessageSquare, Sparkles, Cpu,
 } from 'lucide-react';
-import { sendChatMessage } from '../api/client';
+import { sendChatMessage, LIBRARY } from '../api/client';
 
 const SUGGESTIONS = [
   'Something short and scary for tonight',
@@ -35,6 +35,8 @@ export default function ChatModal({
     } else if (lists.length > 0) {
       const def = lists.find((l) => l.name.toLowerCase() === 'plan to watch') || lists[0];
       setTargetListId(def.id);
+    } else {
+      setTargetListId(LIBRARY);
     }
   }, [currentList, lists]);
 
@@ -87,8 +89,7 @@ export default function ChatModal({
   if (!isOpen) return null;
 
   const handleAdd = async (movie) => {
-    const listId = targetListId || lists[0]?.id;
-    if (!listId) { setError('Please select a list first'); return; }
+    const listId = targetListId || lists[0]?.id || LIBRARY;
     try {
       setAddingId(movie.tmdb_id);
       setError('');
@@ -133,6 +134,7 @@ export default function ChatModal({
                   {lists.map((l) => (
                     <option key={l.id} value={l.id}>{l.name}</option>
                   ))}
+                  <option value={LIBRARY}>Library (no list)</option>
                 </select>
                 <span className="amm__list-select-caret">▾</span>
               </div>
