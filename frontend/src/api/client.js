@@ -267,6 +267,24 @@ export async function loginWithGoogle(credential) {
   return data;
 }
 
+export async function registerAccount({ username, password, email = '' }) {
+  const data = await fetchJson('/auth/register/', {
+    method: 'POST',
+    body: JSON.stringify({ username, password, email }),
+  });
+  csrfToken = data.csrf_token || csrfToken;
+  return data;
+}
+
+export async function loginWithPassword({ username, password }) {
+  const data = await fetchJson('/auth/login/', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
+  csrfToken = data.csrf_token || csrfToken;
+  return data;
+}
+
 // 11. Google Calendar sync
 export async function getCalendarStatus() {
   return await fetchJson('/calendar/status/');

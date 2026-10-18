@@ -434,3 +434,136 @@ class LibraryWithoutListsTests(APITestCase):
 
     def test_visitor_with_no_session_sees_empty_library(self):
         self.assertEqual(APIClient().get('/api/library/movies/').json(), [])
+
+
+class PasswordAccountTests(APITestCase):
+    PASSWORD = 'correct-horse-9'
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+
+    def register(self, client, username='snehal', password=None, **extra):
+        return client.post('/api/auth/register/', {
+            'username': username, 'password': password or self.PASSWORD, **extra,
+        }, format='json')
+
+    def login(self, client, username='snehal', password=None):
+        return client.post('/api/auth/login/', {
+            'username': username, 'password': password or self.PASSWORD,
+        }, format='json')
+
+    def test_register_signs_in_and_me_reports_password_account(self):
+        c = APIClient()
+        res = self.register(c, email='s@example.com')
+        self.assertEqual(res.status_code, 200)
+        me = c.get('/api/auth/me/').json()['user']
+        self.assertEqual((me['name'], me['email'], me['kind']), ('snehal', 's@example.com', 'password'))
+
+    def test_register_without_a_session_creates_no_guest_rows(self):
+        User = get_user_model()
+        c = APIClient()
+        self.login(c, password='whatever-wrong')  # failed attempt from a fresh visitor
+        self.assertEqual(User.objects.count(), 0)
+        self.register(c)
+        self.assertEqual(User.objects.count(), 1)
+
+    def test_password_is_stored_hashed(self):
+        self.register(APIClient())
+        stored = get_user_model().objects.get(username='snehal').password
+        self.assertTrue(stored.startswith('pbkdf2_'))
+        self.assertNotIn(self.PASSWORD, stored)
+
+    def test_username_rules_and_case_insensitive_uniqueness(self):
+        c = APIClient()
+        for bad in ['ab', 'has space', 'dash-name', 'x' * 31, 'guest-abc', 'émile']:
+            self.assertEqual(self.register(c, username=bad).status_code, 400, bad)
+        self.assertEqual(self.register(APIClient(), username='Snehal').status_code, 200)
+        self.assertEqual(self.register(APIClient(), username='SNEHAL').status_code, 400)
+        self.assertEqual(self.login(APIClient(), username='sNeHaL').status_code, 200)
+
+    def test_weak_passwords_and_bad_email_rejected(self):
+        c = APIClient()
+        self.assertEqual(self.register(c, password='short1').status_code, 400)
+        self.assertEqual(self.register(c, password='1234567890').status_code, 400)       # numeric
+        self.assertEqual(self.register(c, password='password123').status_code, 400)      # common
+        self.assertEqual(self.register(c, password='snehal1234').status_code, 400)    # too like the username
+        self.assertEqual(self.register(c, email='not-an-email').status_code, 400)
+        self.assertEqual(get_user_model().objects.count(), 0)
+
+    def test_login_logout_and_wrong_credentials(self):
+        self.register(APIClient())
+        c = APIClient()
+        wrong = self.login(c, password='nope-nope-nope')
+        self.assertEqual(wrong.status_code, 401)
+        self.assertEqual(self.login(c, username='ghost').json()['error'], wrong.json()['error'])
+        self.assertEqual(self.login(c).status_code, 200)
+        self.assertEqual(c.get('/api/auth/me/').json()['user']['name'], 'snehal')
+        c.post('/api/auth/logout/')
+        self.assertIsNone(c.get('/api/auth/me/').json()['user'])
+
+    def test_guest_and_google_accounts_cannot_use_password_login(self):
+        g = APIClient()
+        g.post('/api/lists/', {'name': 'x'}, format='json')  # starts a guest
+        guest = get_user_model().objects.get()
+        empty = APIClient().post('/api/auth/login/', {'username': guest.username, 'password': ''}, format='json')
+        self.assertEqual(empty.status_code, 400)
+        self.assertEqual(self.login(APIClient(), username=guest.username, password='anything-long-1').status_code, 401)
+
+    def test_guest_lists_come_along_when_registering(self):
+        c = APIClient()
+        c.post('/api/lists/', {'name': 'Mine'}, format='json')
+        self.register(c)
+        self.assertEqual([l['name'] for l in c.get('/api/lists/').json()], ['Mine'])
+        self.assertEqual(get_user_model().objects.count(), 1)
+
+    def test_guest_lists_merge_into_account_on_login(self):
+        a = APIClient()
+        a.post('/api/lists/', {'name': 'First'}, format='json')
+        self.register(a)
+        a.post('/api/auth/logout/')
+        b = APIClient()  # new device, guest browsing
+        b.post('/api/lists/', {'name': 'Guest list'}, format='json')
+        self.login(b)
+        self.assertEqual(sorted(l['name'] for l in b.get('/api/lists/').json()), ['First', 'Guest list'])
+
+    def test_accounts_are_separate(self):
+        a, b = APIClient(), APIClient()
+        self.register(a, username='ann')
+        a.post('/api/lists/', {'name': 'Ann list'}, format='json')
+        self.register(b, username='bob')
+        self.assertEqual(b.get('/api/lists/').json(), [])
+
+    def test_signed_in_user_cannot_register_again(self):
+        c = APIClient()
+        self.register(c)
+        self.assertEqual(self.register(c, username='second').status_code, 400)
+
+    def test_failed_logins_lock_the_username_for_a_while(self):
+        self.register(APIClient())
+        c = APIClient()
+        for _ in range(10):
+            self.assertEqual(self.login(c, password='wrong-wrong-1').status_code, 401)
+        self.assertEqual(self.login(c).status_code, 429)  # even the right password is paused
+
+    def test_register_is_rate_limited(self):
+        c = APIClient()
+        codes = [self.register(c, username='abc').status_code for _ in range(12)]
+        self.assertIn(429, codes)
+
+    def test_csrf_is_enforced_for_login(self):
+        self.register(APIClient())
+        strict = APIClient(enforce_csrf_checks=True)
+        res = strict.post('/api/auth/login/', {'username': 'snehal', 'password': self.PASSWORD}, format='json')
+        self.assertEqual(res.status_code, 403)
+        strict.get('/api/auth/me/')  # sets the csrf cookie
+        token = strict.cookies['csrftoken'].value
+        ok = strict.post('/api/auth/login/', {'username': 'snehal', 'password': self.PASSWORD},
+                         format='json', HTTP_X_CSRFTOKEN=token)
+        self.assertEqual(ok.status_code, 200)
+
+    def test_password_users_cannot_connect_google_calendar(self):
+        c = APIClient()
+        self.register(c)
+        res = c.post('/api/calendar/connect/', {'code': 'x', 'time_zone': 'UTC'}, format='json')
+        self.assertEqual(res.status_code, 403)
