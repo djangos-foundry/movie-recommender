@@ -115,6 +115,11 @@ _extra_origins = [o.strip() for o in os.getenv('SITE_ORIGINS', '').split(',') if
 CORS_ALLOWED_ORIGINS += _extra_origins
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
+# Django's default (same-origin) isolates the page from popups it opens, which
+# stops Google's sign-in popup from returning its result. Only matters in
+# production, where Django serves the page itself.
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin-allow-popups'
+
 if not DEBUG and os.getenv('USE_HTTPS', 'True').lower() in ('true', '1', 'yes'):
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
