@@ -3195,7 +3195,7 @@ select {
       rgba(13, 13, 13, 0.55) 50%,
       rgba(13, 13, 13, 0.15) 75%,
       rgba(13, 13, 13, 0.02) 90%,
-      transparent 50%);
+      transparent 90%);
 }
 
 /* Left fade — narrow, only first 20% of width */
