@@ -127,6 +127,12 @@ if not DEBUG and os.getenv('USE_HTTPS', 'True').lower() in ('true', '1', 'yes'):
 
 # Django REST Framework Settings
 REST_FRAMEWORK = {
+    # One proxy (Caddy) sits in front in production; it sets X-Forwarded-For
+    'NUM_PROXIES': 1,
+    'DEFAULT_THROTTLE_RATES': {
+        'auth_login': '20/min',
+        'auth_register': '10/hour',
+    },
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'movies.auth.GuestSessionAuthentication',
     ],

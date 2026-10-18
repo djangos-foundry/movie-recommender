@@ -16,9 +16,13 @@ def start_guest_session(http_request):
     return user
 
 
+def has_google(user):
+    return hasattr(user, 'google_account')
+
+
 def is_guest(user):
-    """A guest has no Google account linked yet."""
-    return not hasattr(user, 'google_account')
+    """A guest signed in with neither Google nor a username and password."""
+    return not has_google(user) and not user.has_usable_password()
 
 
 def owned(queryset, request, field='owner'):
@@ -41,3 +45,15 @@ class GuestSessionAuthentication(SessionAuthentication):
         if result is not None or request.method in SAFE_METHODS:
             return result
         return (start_guest_session(request._request), None)
+
+
+class StrictSessionAuthentication(SessionAuthentication):
+    """Session auth for login and register: never starts a guest session (so
+    failed attempts leave no database rows) and checks CSRF even when the
+    visitor has no session yet."""
+
+    def authenticate(self, request):
+        result = super().authenticate(request)
+        if result is None:
+            self.enforce_csrf(request)
+        return result

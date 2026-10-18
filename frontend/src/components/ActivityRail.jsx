@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import GoogleSignInButton from './GoogleSignInButton';
-import { CalendarCheck, CalendarPlus, Unplug, CircleUser, Settings, LogOut, Undo2, Film, Compass, CalendarDays, Trash2 } from 'lucide-react';
+import { CalendarCheck, CalendarPlus, Unplug, CircleUser, Settings, LogOut, Undo2, Film, Compass, CalendarDays, Trash2, UserPlus, ChevronRight } from 'lucide-react';
 
 const SECTIONS = [
   { id: 'library', label: 'Library', icon: Film, shortcutKey: 'goLibrary', fallback: 'Ctrl+Shift+1' },
@@ -20,6 +20,7 @@ export default function ActivityRail({
   user = null, // null = guest; { name, email } when signed in with Google
   googleClientId = '',
   onGoogleCredential,
+  onOpenAuth,
   onSignOut,
   calendar = null, // { connected, needs_reconnect } once the account is signed in
   isCalendarBusy = false,
@@ -72,9 +73,19 @@ export default function ActivityRail({
                     <p className="activity-rail__guest-text">
                       You're browsing as a guest. Your lists stay in this browser only.
                     </p>
+                    <button
+                      type="button"
+                      onClick={() => { closeMenu(); onOpenAuth?.(); }}
+                      className="activity-rail__signin-row"
+                    >
+                      <UserPlus size={13} />
+                      <span>Sign in or create account</span>
+                      <ChevronRight size={13} className="activity-rail__signin-chevron" />
+                    </button>
                     <GoogleSignInButton
                       clientId={googleClientId}
                       onCredential={onGoogleCredential}
+                      width={240}
                     />
                     <p className="activity-rail__guest-text">
                       Sign in to keep them on any device.
@@ -96,7 +107,7 @@ export default function ActivityRail({
                   <Settings size={13} />
                   <span>Settings</span>
                 </button>
-                {user && (
+                {user?.kind === 'google' && (
                   <>
                     <button
                       type="button"

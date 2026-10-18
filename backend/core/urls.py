@@ -12,8 +12,18 @@ def spa_index(request, *args, **kwargs):
     return FileResponse(open(index, 'rb'), content_type='text/html')
 
 
+def privacy(request):
+    """Serve the built privacy page at /privacy (no .html needed)."""
+    page = settings.FRONTEND_DIST / 'privacy.html'
+    if not page.is_file():
+        raise Http404('Frontend not built. Run "npm run build".')
+    return FileResponse(open(page, 'rb'), content_type='text/html')
+
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('movies.urls')),
+    path('privacy', privacy),
+    path('privacy/', privacy),
     re_path(r'^(?!api/|admin/|static/).*$', spa_index),
 ]

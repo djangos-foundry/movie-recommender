@@ -2,12 +2,12 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .auth import is_guest
+from .auth import has_google
 from .services import gcal
 
 
 def _needs_account(request):
-    if not request.user.is_authenticated or is_guest(request.user):
+    if not request.user.is_authenticated or not has_google(request.user):
         return Response(
             {"error": "Sign in with Google first to connect your calendar."},
             status=status.HTTP_403_FORBIDDEN,

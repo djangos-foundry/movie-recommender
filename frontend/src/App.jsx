@@ -6,6 +6,7 @@ import MovieSearchModal from './components/MovieSearchModal';
 import Discover from './components/Discover';
 import Schedule from './components/Schedule';
 import NewListModal from './components/NewListModal';
+import AuthModal from './components/AuthModal';
 import TrashModal from './components/TrashModal';
 import ActivityRail from './components/ActivityRail';
 import SettingsModal from './components/SettingsModal';
@@ -156,6 +157,8 @@ export default function App() {
       showToast(err.message || 'Google sign-in failed', 'error');
     }
   }, []);
+
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -709,6 +712,7 @@ export default function App() {
         user={authUser}
         googleClientId={googleClientId}
         onGoogleCredential={handleGoogleCredential}
+        onOpenAuth={() => setIsAuthOpen(true)}
         onSignOut={handleSignOut}
         calendar={calendar}
         isCalendarBusy={isCalendarBusy}
@@ -807,6 +811,14 @@ export default function App() {
       />
 
       {/* New List Modal */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        googleClientId={googleClientId}
+        onGoogleCredential={handleGoogleCredential}
+        onSuccess={() => window.location.reload()}
+      />
+
       <NewListModal
         isOpen={isNewListOpen}
         onClose={() => setIsNewListOpen(false)}
