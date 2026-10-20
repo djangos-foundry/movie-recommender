@@ -117,7 +117,7 @@
   min-width: 0;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: #4a4846 transparent;
+  scrollbar-color: var(--scrollbar) transparent;
 }
 
 .st__content-inner {
@@ -249,7 +249,7 @@
 .st-warn {
   padding: 12px 0 0;
   font-size: 13px;
-  color: #fca5a5;
+  color: var(--red-text);
 }
 
 .st-actions {

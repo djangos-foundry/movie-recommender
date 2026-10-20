@@ -4,9 +4,9 @@ import { getListIcon } from './NewListModal';
 import BrandHeader from './BrandHeader';
 
 const CORE_STATUSES = [
-  { id: 'plan_to_watch', name: 'Plan to Watch', icon: Bookmark, color: '#60a5fa' },
-  { id: 'watching',      name: 'Watching',       icon: Clock,       color: '#fbbf24' },
-  { id: 'completed',     name: 'Completed',       icon: CheckCircle2, color: '#34d399' },
+  { id: 'plan_to_watch', name: 'Plan to Watch', icon: Bookmark, color: 'var(--blue)' },
+  { id: 'watching',      name: 'Watching',       icon: Clock,       color: 'var(--amber)' },
+  { id: 'completed',     name: 'Completed',       icon: CheckCircle2, color: 'var(--green)' },
 ];
 
 export default function Sidebar({

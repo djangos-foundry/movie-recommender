@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Palette, Keyboard, Compass, Minus, Plus, CalendarDays } from 'lucide-react';
+import { X, Palette, Keyboard, Compass, Minus, Plus, CalendarDays, Film } from 'lucide-react';
 import '../settings.css';
 import { ACCENTS } from '../lib/prefs';
 import { DEFAULT_SHORTCUTS, SHORTCUT_GROUPS, findShortcutConflict, formatShortcut, shortcutFromEvent } from '../lib/shortcuts';
@@ -11,6 +11,7 @@ export { DEFAULT_SHORTCUTS };
 const SECTIONS = [
   { id: 'appearance', label: 'Appearance', icon: Palette, subtitle: 'Make the app look the way you like.' },
   { id: 'shortcuts', label: 'Keyboard shortcuts', icon: Keyboard, subtitle: 'Click Edit, then press the new keys. Section shortcuts only work while that section is open.' },
+  { id: 'library', label: 'Library', icon: Film, subtitle: 'Choose how your movies are shown.' },
   { id: 'discover', label: 'Discover', icon: Compass, subtitle: 'Control how recommendations are drawn and shown.' },
   { id: 'calendar', label: 'Calendar', icon: CalendarDays, subtitle: 'Choose what shows on scheduled-watch cards.' },
 ];
@@ -76,6 +77,7 @@ export default function SettingsModal({
   prefs,
   onPrefsChange,
   onClearDiscoverHistory,
+  resolvedTheme = 'dark', // swatches preview the accent as it'll actually look in this theme
 }) {
   const [section, setSection] = useState('appearance');
   const [recording, setRecording] = useState(null);
@@ -157,14 +159,16 @@ export default function SettingsModal({
 
             {section === 'appearance' && (
               <div className="st-rows">
-                <Row title="Theme" description="Dark is the only theme for now. Light and System are on the way.">
+                <Row title="Theme" description="Dark is the default. System follows your device's light or dark setting.">
                   <Segments
                     label="Theme"
-                    value="dark"
+                    value={prefs.theme}
                     options={[
                       { id: 'dark', label: 'Dark' },
-                      { id: 'light', label: 'Light', badge: 'Soon', disabled: true },
+                      { id: 'light', label: 'Light' },
+                      { id: 'system', label: 'System' },
                     ]}
+                    onChange={(id) => onPrefsChange({ theme: id })}
                   />
                 </Row>
                 <Row
@@ -177,7 +181,7 @@ export default function SettingsModal({
                         key={id}
                         type="button"
                         className={`st-swatch ${prefs.accent === id ? 'is-on' : ''}`}
-                        style={{ '--swatch': a.accent }}
+                        style={{ '--swatch': resolvedTheme === 'light' ? a.light.accent : a.accent }}
                         aria-label={a.label}
                         aria-pressed={prefs.accent === id}
                         title={a.label}
@@ -186,7 +190,15 @@ export default function SettingsModal({
                     ))}
                   </div>
                 </Row>
-                <Row title="Poster size" description="How large movie cards are in Library.">
+              </div>
+            )}
+
+            {section === 'library' && (
+              <div className="st-rows">
+                <Row
+                  title="Poster size"
+                  description="How large movie cards are in Library."
+                >
                   <Segments
                     label="Poster size"
                     value={prefs.cardSize}

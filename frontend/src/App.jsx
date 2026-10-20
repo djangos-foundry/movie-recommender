@@ -15,7 +15,7 @@ import MobileMore from './components/MobileMore';
 import useIsMobile from './lib/useIsMobile';
 import './mobile.css';
 import { DEFAULT_SHORTCUTS, matchesShortcut, loadShortcuts, isBareKey, isTypingTarget } from './lib/shortcuts';
-import { loadPrefs, savePrefs, applyAccent } from './lib/prefs';
+import { loadPrefs, savePrefs, applyAccent, applyTheme, resolveTheme, watchSystemTheme } from './lib/prefs';
 import {
   getLists,
   createList,
@@ -80,7 +80,15 @@ export default function App() {
   // User preferences (accent, Discover defaults, poster size), persisted to localStorage
   const [prefs, setPrefs] = useState(loadPrefs);
   useEffect(() => { savePrefs(prefs); }, [prefs]);
-  useEffect(() => { applyAccent(prefs.accent); }, [prefs.accent]);
+  // Theme: Dark (default), Light, or System (follows the OS, live)
+  const [resolvedTheme, setResolvedTheme] = useState(() => resolveTheme(prefs.theme));
+  useEffect(() => {
+    setResolvedTheme(resolveTheme(prefs.theme));
+    if (prefs.theme !== 'system') return undefined;
+    return watchSystemTheme(() => setResolvedTheme(resolveTheme('system')));
+  }, [prefs.theme]);
+  useEffect(() => { applyTheme(resolvedTheme); }, [resolvedTheme]);
+  useEffect(() => { applyAccent(prefs.accent, resolvedTheme); }, [prefs.accent, resolvedTheme]);
   const handlePrefsChange = useCallback((patch) => setPrefs((prev) => ({ ...prev, ...patch })), []);
 
   // Bumped by Settings to ask Discover to wipe its round history
@@ -925,6 +933,7 @@ export default function App() {
         prefs={prefs}
         onPrefsChange={handlePrefsChange}
         onClearDiscoverHistory={() => setClearDiscoverSignal((n) => n + 1)}
+        resolvedTheme={resolvedTheme}
       />
 
       {/* TMDB Search Modal */}
