@@ -127,15 +127,22 @@ class MovieListMoviesView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Retrieve or create Movie instance
-        movie = Movie.objects.filter(tmdb_id=tmdb_id).first()
-        if not movie or not movie.overview or not movie.cast or not movie.director:
+        media_type = data.get('media_type') or movie_payload.get('media_type') or 'movie'
+        if media_type not in ('movie', 'tv'):
+            media_type = 'movie'
+        is_tv = media_type == 'tv'
+
+        # Retrieve or create Movie instance (a show has no director, and needs its seasons)
+        movie = Movie.objects.filter(media_type=media_type, tmdb_id=tmdb_id).first()
+        stale = (not movie or not movie.overview or not movie.cast
+                 or (not is_tv and not movie.director) or (is_tv and not movie.seasons))
+        if stale:
             # Fetch comprehensive details from TMDB service
-            fetched_details = tmdb_service.get_movie_details(tmdb_id)
+            fetched_details = tmdb_service.get_details(tmdb_id, media_type)
             if fetched_details:
                 movie_payload = {**movie_payload, **fetched_details}
 
-            title = movie_payload.get('title') or f"Movie #{tmdb_id}"
+            title = movie_payload.get('title') or f"{'Show' if is_tv else 'Movie'} #{tmdb_id}"
             original_title = movie_payload.get('original_title') or title
             tagline = movie_payload.get('tagline', '')
             overview = movie_payload.get('overview', '')
@@ -161,9 +168,20 @@ class MovieListMoviesView(APIView):
             original_language = str(movie_payload.get('original_language', ''))
             production_countries = movie_payload.get('production_countries', [])
 
+            tv_fields = {
+                'number_of_seasons': movie_payload.get('number_of_seasons'),
+                'number_of_episodes': movie_payload.get('number_of_episodes'),
+                'seasons': movie_payload.get('seasons') or [],
+                'networks': movie_payload.get('networks') or [],
+                'last_air_date': str(movie_payload.get('last_air_date') or ''),
+                'next_episode_to_air': movie_payload.get('next_episode_to_air'),
+            } if is_tv else {}
+
             movie, _ = Movie.objects.update_or_create(
+                media_type=media_type,
                 tmdb_id=tmdb_id,
                 defaults={
+                    **tv_fields,
                     'title': title,
                     'original_title': original_title,
                     'tagline': tagline,
@@ -280,6 +298,14 @@ class MovieListItemDetailView(RetrieveUpdateDestroyAPIView):
             instance.user_rating = int(rating) if rating is not None else None
         if 'user_notes' in request.data:
             instance.user_notes = request.data['user_notes']
+        # TV progress ("up to S2E5"); null clears it
+        for field in ('current_season', 'current_episode'):
+            if field in request.data:
+                value = request.data[field]
+                try:
+                    setattr(instance, field, max(0, int(value)) if value is not None else None)
+                except (ValueError, TypeError):
+                    return Response({"error": f"{field} must be a number."}, status=status.HTTP_400_BAD_REQUEST)
 
         instance.save()
         serializer = self.get_serializer(instance)
@@ -331,7 +357,8 @@ class ScheduledWatchDetailView(RetrieveUpdateDestroyAPIView):
 
 class TMDBSearchView(APIView):
     """
-    GET /api/tmdb/search/?q=... - Search movies via TMDB or fallback mock data.
+    GET /api/tmdb/search/?q=...[&type=multi] - Search movies via TMDB or
+        fallback mock data; type=multi searches TV shows too.
     """
 
     def get(self, request):
@@ -342,6 +369,8 @@ class TMDBSearchView(APIView):
         except (ValueError, TypeError):
             page = 1
 
+        if request.query_params.get('type') == 'multi':
+            return Response(tmdb_service.search_multi(query, page=page))
         results = tmdb_service.search_movies(query, page=page)
         return Response(results)
 
@@ -356,6 +385,21 @@ class TMDBMovieDetailView(APIView):
         if not details:
             return Response(
                 {"error": f"Movie with tmdb_id {tmdb_id} not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(details)
+
+
+class TMDBTvDetailView(APIView):
+    """
+    GET /api/tmdb/tv/<int:tmdb_id>/ - Fetch TV show detail by TMDB ID.
+    """
+
+    def get(self, request, tmdb_id):
+        details = tmdb_service.get_tv_details(tmdb_id)
+        if not details:
+            return Response(
+                {"error": f"TV show with tmdb_id {tmdb_id} not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response(details)

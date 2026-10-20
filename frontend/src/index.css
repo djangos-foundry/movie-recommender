@@ -74,6 +74,32 @@ select {
   --amber: #fbbf24;
   --green: #34d399;
   --red: #f87171;
+  /* Status text on tinted badges */
+  --blue-text: #93c5fd;
+  --amber-text: #fcd34d;
+  --green-text: #6ee7b7;
+  --red-text: #fca5a5;
+
+  /* Foreground washes: rgba(var(--fg-rgb), 0.06) is a faint white film in dark
+     mode and a faint ink film in light mode, for hovers, borders and chips */
+  --fg-rgb: 255, 255, 255;
+
+  /* Movie page: its canvas, and the colour the backdrop fades into */
+  --mdp-bg: #0d0d0d;
+  --mdp-rgb: 13, 13, 13;
+  --mdp-surface: #1a1a1a;
+  --mdp-title: #ffffff;
+  --mdp-backdrop-opacity: 0.75;
+
+  /* Floating panels, deep fields, scrollbars */
+  --popover-bg: #18181b;
+  --field-deep: #101012;
+  --field-raised: #1f1f24;
+  --field-raised-hover: #26262c;
+  --field-line: #3a3a42;
+  --field-line-hover: #4a4a54;
+  --scrollbar: #333;
+  --scrollbar-hover: #4a4a4a;
 
   /* Sizing */
   --rail-w: 52px;
@@ -86,6 +112,58 @@ select {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
   color-scheme: dark;
+}
+
+/* ── Light theme (Settings › Appearance › Theme). Dark above stays the default.
+   The accent itself is swapped to a deeper variant in lib/prefs.js. ── */
+:root[data-theme='light'] {
+  --accent-hover: color-mix(in srgb, var(--accent) 86%, #000000);
+  --accent-dim: color-mix(in srgb, var(--accent) 12%, transparent);
+
+  --star: #d19c00;
+
+  --bg-void: #ececef;
+  --bg-deep: #f5f5f7;
+  --bg-base: #fbfbfc;
+  --bg-raised: #ffffff;
+  --bg-surface: #f0f0f3;
+  --bg-hover: #e7e7ec;
+
+  --border-faint: rgba(24, 24, 32, 0.07);
+  --border-subtle: rgba(24, 24, 32, 0.11);
+  --border-mid: rgba(24, 24, 32, 0.17);
+
+  --text-primary: #1b1b1f;
+  --text-secondary: #5d5d68;
+  --text-muted: #8f8f99;
+
+  --blue: #2563eb;
+  --amber: #b7791f;
+  --green: #15803d;
+  --red: #dc2626;
+  --blue-text: #1d4ed8;
+  --amber-text: #92600a;
+  --green-text: #15803d;
+  --red-text: #b91c1c;
+
+  --fg-rgb: 24, 24, 32;
+
+  --mdp-bg: #fbfbfc;
+  --mdp-rgb: 251, 251, 252;
+  --mdp-surface: #ececf0;
+  --mdp-title: #1b1b1f;
+  --mdp-backdrop-opacity: 0.9;
+
+  --popover-bg: #ffffff;
+  --field-deep: #f3f3f6;
+  --field-raised: #ffffff;
+  --field-raised-hover: #f3f3f6;
+  --field-line: #d7d7de;
+  --field-line-hover: #c3c3cc;
+  --scrollbar: #cfcfd6;
+  --scrollbar-hover: #b5b5bf;
+
+  color-scheme: light;
 }
 
 /* ── Base ── */
@@ -110,7 +188,7 @@ body {
 /* ── Scrollbar ── */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #333 transparent;
+  scrollbar-color: var(--scrollbar) transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -123,12 +201,12 @@ body {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #333;
+  background: var(--scrollbar);
   border-radius: 99px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #4a4a4a;
+  background: var(--scrollbar-hover);
 }
 
 /* ── Animations ── */
@@ -257,7 +335,7 @@ body {
 .activity-rail__avatar-btn:hover {
   background: var(--accent);
   border-color: var(--accent);
-  color: #000;
+  color: var(--on-accent);
 }
 
 .activity-rail__avatar-initials {
@@ -279,7 +357,7 @@ body {
   left: calc(var(--rail-w) - 4px);
   top: 0;
   width: 268px;
-  background: #18181b;
+  background: var(--popover-bg);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 14px;
@@ -304,7 +382,7 @@ body {
   height: 34px;
   border-radius: 50%;
   background: var(--accent);
-  color: #000;
+  color: var(--on-accent);
   font-size: 11px;
   font-weight: 800;
   display: flex;
@@ -488,7 +566,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #000;
+  color: var(--on-accent);
   flex-shrink: 0;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent);
 }
@@ -574,12 +652,12 @@ body {
 }
 
 .sidebar__nav-item:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--fg-rgb), 0.04);
   color: var(--text-primary);
 }
 
 .sidebar__nav-item--active {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--fg-rgb), 0.07);
   color: var(--text-primary);
   font-weight: 600;
 }
@@ -614,7 +692,7 @@ body {
 
 .sidebar__nav-badge--active {
   background: var(--accent);
-  color: #000;
+  color: var(--on-accent);
 }
 
 /* Custom list items */
@@ -655,12 +733,12 @@ body {
 }
 
 .sidebar__list-item:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--fg-rgb), 0.04);
   color: var(--text-primary);
 }
 
 .sidebar__list-item--active {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--fg-rgb), 0.07);
   color: var(--text-primary);
   font-weight: 600;
 }
@@ -773,17 +851,17 @@ body {
 }
 
 .sidebar__dropdown-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--fg-rgb), 0.06);
   color: var(--text-primary);
 }
 
 .sidebar__dropdown-item--danger {
-  color: #f87171;
+  color: var(--red);
 }
 
 .sidebar__dropdown-item--danger:hover {
   background: rgba(248, 113, 113, 0.12);
-  color: #f87171;
+  color: var(--red);
 }
 
 /* ==========================================================================
@@ -1004,7 +1082,7 @@ body {
 }
 
 .topbar__sort-option:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--fg-rgb), 0.06);
   color: var(--text-primary);
 }
 
@@ -1023,7 +1101,7 @@ body {
   padding: 0 14px;
   border-radius: var(--radius-md);
   background: var(--accent);
-  color: #000;
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 700;
   transition: all 0.13s;
@@ -1180,16 +1258,21 @@ body {
 .movie-card__delete-btn:hover {
   opacity: 1 !important;
   background: rgba(40, 40, 40, 0.96);
-  color: #f87171;
+  color: var(--red);
   border-color: rgba(248, 113, 113, 0.5);
   transform: scale(1.12);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.7);
 }
 
+/* Sits on the poster image, so it keeps the dark-theme colours in light mode too */
 .movie-card__status-badge {
   position: absolute;
   bottom: 8px;
   left: 8px;
+  --blue-text: #93c5fd;
+  --amber-text: #fcd34d;
+  --green-text: #6ee7b7;
+  --red-text: #fca5a5;
 }
 
 .movie-card__info {
@@ -1241,6 +1324,33 @@ body {
    STATUS BADGES
    ========================================================================== */
 
+/* Small "TV" tag that marks a TV show among movies (search results, detail title) */
+.tv-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-mid);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* On a poster it sits top-left over the artwork, so it keeps a dark chip in both themes */
+.movie-card__tv-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.72);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
 .badge {
   font-size: 10px;
   font-weight: 600;
@@ -1252,25 +1362,25 @@ body {
 .badge--blue {
   background: rgba(96, 165, 250, 0.15);
   border-color: rgba(96, 165, 250, 0.3);
-  color: #93c5fd;
+  color: var(--blue-text);
 }
 
 .badge--amber {
   background: rgba(251, 191, 36, 0.15);
   border-color: rgba(251, 191, 36, 0.3);
-  color: #fcd34d;
+  color: var(--amber-text);
 }
 
 .badge--green {
   background: rgba(52, 211, 153, 0.15);
   border-color: rgba(52, 211, 153, 0.3);
-  color: #6ee7b7;
+  color: var(--green-text);
 }
 
 .badge--red {
   background: rgba(248, 113, 113, 0.15);
   border-color: rgba(248, 113, 113, 0.3);
-  color: #fca5a5;
+  color: var(--red-text);
 }
 
 /* ==========================================================================
@@ -2586,7 +2696,7 @@ select {
 }
 
 .trash-row__btn--danger:hover:not(:disabled) {
-  color: #f87171;
+  color: var(--red);
 }
 
 .trash-row__btn:disabled {
@@ -2791,7 +2901,7 @@ select {
   height: 13px;
   border-radius: 50%;
   background: var(--accent);
-  color: #000;
+  color: var(--on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2826,7 +2936,7 @@ select {
   font-size: 12px;
   font-weight: 700;
   background: var(--accent);
-  color: #000;
+  color: var(--on-accent);
   transition: all 0.13s;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 25%, transparent);
 }
@@ -3162,7 +3272,7 @@ select {
   padding: 6px 12px;
   border-radius: var(--radius-sm);
   background: var(--accent);
-  color: #000;
+  color: var(--on-accent);
   font-size: 11px;
   font-weight: 700;
   transition: all 0.12s;
@@ -3202,7 +3312,7 @@ select {
 
 .add-movie-modal__tmdb-badge {
   background: var(--accent);
-  color: #000;
+  color: var(--on-accent);
   font-size: 9px;
   font-weight: 900;
   padding: 2px 5px;
@@ -3232,7 +3342,7 @@ select {
   flex-direction: column;
   height: 100%;
   overflow-y: auto;
-  background: #0d0d0d;
+  background: var(--mdp-bg);
   color: var(--text-primary);
   position: relative;
 }
@@ -3246,9 +3356,9 @@ select {
   align-items: center;
   justify-content: space-between;
   padding: 0 36px;
-  background: rgba(13, 13, 13, 0.88);
+  background: rgba(var(--mdp-rgb), 0.88);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(var(--fg-rgb), 0.06);
   flex-shrink: 0;
 }
 
@@ -3258,8 +3368,8 @@ select {
   gap: 6px;
   padding: 6px 12px;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(var(--fg-rgb), 0.06);
+  border: 1px solid rgba(var(--fg-rgb), 0.09);
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 600;
@@ -3267,7 +3377,7 @@ select {
 }
 
 .mdp-back-btn:hover {
-  background: rgba(255, 255, 255, 0.10);
+  background: rgba(var(--fg-rgb), 0.10);
   color: var(--text-primary);
 }
 
@@ -3285,15 +3395,15 @@ select {
   height: 32px;
   padding: 0 14px 0 5px;
   border-radius: 99px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(var(--fg-rgb), 0.05);
+  border: 1px solid rgba(var(--fg-rgb), 0.10);
   font-size: 12px;
   transition: background 0.15s, border-color 0.15s;
 }
 
 .mdp-list-pill:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(var(--fg-rgb), 0.08);
+  border-color: rgba(var(--fg-rgb), 0.16);
 }
 
 .mdp-list-pill__icon {
@@ -3322,7 +3432,7 @@ select {
   border-radius: 99px;
   background: rgba(239, 68, 68, 0.10);
   border: 1px solid rgba(239, 68, 68, 0.25);
-  color: #f87171;
+  color: var(--red);
   font-size: 12px;
   font-weight: 600;
   transition: all 0.15s;
@@ -3351,7 +3461,7 @@ select {
   height: 100%;
   object-fit: cover;
   object-position: 50% 40%;
-  opacity: 0.75;
+  opacity: var(--mdp-backdrop-opacity);
   display: block;
 }
 
@@ -3361,8 +3471,8 @@ select {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #1a1a1a;
-  color: #333;
+  background: var(--mdp-surface);
+  color: var(--text-muted);
 }
 
 /* Bottom fade — only covers lowest ~30% so 70%+ of image is fully visible */
@@ -3370,12 +3480,12 @@ select {
   position: absolute;
   inset: 0;
   background: linear-gradient(to top,
-      #0d0d0d 0%,
-      rgba(13, 13, 13, 0.85) 30%,
-      rgba(13, 13, 13, 0.55) 50%,
-      rgba(13, 13, 13, 0.15) 75%,
-      rgba(13, 13, 13, 0.02) 90%,
-      transparent 90%);
+      var(--mdp-bg) 0%,
+      rgba(var(--mdp-rgb), 0.85) 30%,
+      rgba(var(--mdp-rgb), 0.55) 50%,
+      rgba(var(--mdp-rgb), 0.15) 75%,
+      rgba(var(--mdp-rgb), 0.02) 90%,
+      rgba(var(--mdp-rgb), 0) 90%);
 }
 
 /* Left fade — narrow, only first 20% of width */
@@ -3383,10 +3493,10 @@ select {
   position: absolute;
   inset: 0;
   background: linear-gradient(to right,
-      rgba(13, 13, 13, 0.70) 0%,
-      rgba(13, 13, 13, 0.30) 10%,
-      rgba(13, 13, 13, 0.05) 20%,
-      transparent 32%);
+      rgba(var(--mdp-rgb), 0.70) 0%,
+      rgba(var(--mdp-rgb), 0.30) 10%,
+      rgba(var(--mdp-rgb), 0.05) 20%,
+      rgba(var(--mdp-rgb), 0) 32%);
 }
 
 /* Top fade — just enough to hide behind the sticky topbar */
@@ -3394,9 +3504,9 @@ select {
   position: absolute;
   inset: 0;
   background: linear-gradient(to bottom,
-      #0d0d0d 0%,
-      rgba(13, 13, 13, 0.35) 5%,
-      transparent 14%);
+      var(--mdp-bg) 0%,
+      rgba(var(--mdp-rgb), 0.35) 5%,
+      rgba(var(--mdp-rgb), 0) 14%);
 }
 
 .mdp-hero-content {
@@ -3417,8 +3527,8 @@ select {
   height: 315px;
   border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.80), 0 0 0 1px rgba(255, 255, 255, 0.08);
-  background: #1a1a1a;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.80), 0 0 0 1px rgba(var(--fg-rgb), 0.08);
+  background: var(--mdp-surface);
 }
 
 .mdp-poster-img {
@@ -3436,7 +3546,7 @@ select {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #444;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
 }
@@ -3467,7 +3577,7 @@ select {
 .mdp-title {
   font-size: clamp(2rem, 5vw, 3.2rem);
   font-weight: 900;
-  color: #ffffff;
+  color: var(--mdp-title);
   line-height: 1.05;
   letter-spacing: -0.5px;
   text-transform: uppercase;
@@ -3498,8 +3608,8 @@ select {
   gap: 5px;
   padding: 4px 10px;
   border-radius: 5px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(var(--fg-rgb), 0.06);
+  border: 1px solid rgba(var(--fg-rgb), 0.10);
   font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
@@ -3520,6 +3630,182 @@ select {
   color: var(--text-primary);
 }
 
+/* A show that is still airing */
+.mdp-meta-pill--live {
+  border-color: rgba(52, 211, 153, 0.30);
+  background: rgba(52, 211, 153, 0.08);
+  color: var(--green-text);
+}
+
+.mdp-tv-tag {
+  margin-left: 12px;
+  font-size: 11px;
+  vertical-align: middle;
+  position: relative;
+  top: -0.3em;
+}
+
+/* TV progress: "S2E5 [−]  [+ 1 episode]  Next up: S2E6" */
+.mdp-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mdp-progress__stepper {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--fg-rgb), 0.12);
+  background: rgba(var(--fg-rgb), 0.05);
+  overflow: hidden;
+}
+
+.mdp-progress__code {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: 0.3px;
+}
+
+.mdp-progress__btn {
+  display: grid;
+  place-items: center;
+  padding: 7px 9px;
+  border-left: 1px solid rgba(var(--fg-rgb), 0.12);
+  color: var(--text-secondary);
+}
+
+.mdp-progress__btn:hover {
+  background: rgba(var(--fg-rgb), 0.08);
+  color: var(--text-primary);
+}
+
+.mdp-progress__none {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.mdp-progress__next {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.mdp-progress__next:hover {
+  background: var(--accent-hover);
+}
+
+.mdp-progress__hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Seasons list on a show's page */
+.mdp-seasons {
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--fg-rgb), 0.07);
+  overflow: hidden;
+}
+
+.mdp-season {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: rgba(var(--fg-rgb), 0.03);
+}
+
+.mdp-season + .mdp-season {
+  border-top: 1px solid rgba(var(--fg-rgb), 0.06);
+}
+
+.mdp-season__poster {
+  width: 36px;
+  height: 54px;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(var(--fg-rgb), 0.06);
+  color: var(--text-muted);
+}
+
+.mdp-season__poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mdp-season__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mdp-season__name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.mdp-season__meta {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.mdp-season__bar {
+  width: 160px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(var(--fg-rgb), 0.08);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.mdp-season__bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.mdp-season__bar i.is-done {
+  background: var(--green);
+}
+
+.mdp-season__state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  width: 96px;
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.mdp-season__state.is-active {
+  color: var(--accent);
+}
+
+.mdp-season__state.is-done {
+  color: var(--green-text);
+}
+
 .mdp-meta-pill__sub {
   color: var(--text-muted);
   font-weight: 400;
@@ -3534,8 +3820,8 @@ select {
 .mdp-genre-tag {
   padding: 3px 10px;
   border-radius: 99px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(var(--fg-rgb), 0.05);
+  border: 1px solid rgba(var(--fg-rgb), 0.10);
   font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
@@ -3576,13 +3862,13 @@ select {
 }
 
 .mdp-status-pill--inactive {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.09);
+  background: rgba(var(--fg-rgb), 0.05);
+  border-color: rgba(var(--fg-rgb), 0.09);
   color: var(--text-muted);
 }
 
 .mdp-status-pill--inactive:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(var(--fg-rgb), 0.09);
   color: var(--text-primary);
 }
 
@@ -3590,28 +3876,28 @@ select {
 .mdp-status-pill--plan {
   background: rgba(96, 165, 250, 0.15);
   border-color: rgba(96, 165, 250, 0.45);
-  color: #93c5fd;
+  color: var(--blue-text);
   box-shadow: 0 0 12px rgba(96, 165, 250, 0.15);
 }
 
 .mdp-status-pill--watching {
   background: rgba(251, 191, 36, 0.15);
   border-color: rgba(251, 191, 36, 0.45);
-  color: #fcd34d;
+  color: var(--amber-text);
   box-shadow: 0 0 12px rgba(251, 191, 36, 0.15);
 }
 
 .mdp-status-pill--completed {
   background: rgba(52, 211, 153, 0.15);
   border-color: rgba(52, 211, 153, 0.45);
-  color: #6ee7b7;
+  color: var(--green-text);
   box-shadow: 0 0 12px rgba(52, 211, 153, 0.15);
 }
 
 .mdp-status-pill--dropped {
   background: rgba(248, 113, 113, 0.15);
   border-color: rgba(248, 113, 113, 0.45);
-  color: #fca5a5;
+  color: var(--red-text);
   box-shadow: 0 0 12px rgba(248, 113, 113, 0.15);
 }
 
@@ -3640,7 +3926,7 @@ select {
   letter-spacing: 1.2px;
   color: var(--text-muted);
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(var(--fg-rgb), 0.06);
 }
 
 .mdp-overview-text {
@@ -3656,7 +3942,7 @@ select {
   overflow-x: auto;
   padding-bottom: 8px;
   scrollbar-width: thin;
-  scrollbar-color: #2a2a2a transparent;
+  scrollbar-color: var(--scrollbar) transparent;
 }
 
 .mdp-cast-scroll::-webkit-scrollbar {
@@ -3668,7 +3954,7 @@ select {
 }
 
 .mdp-cast-scroll::-webkit-scrollbar-thumb {
-  background: #2a2a2a;
+  background: var(--scrollbar);
   border-radius: 99px;
 }
 
@@ -3680,13 +3966,13 @@ select {
   width: 185px;
   padding: 10px 12px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(var(--fg-rgb), 0.04);
+  border: 1px solid rgba(var(--fg-rgb), 0.07);
   transition: background 0.15s;
 }
 
 .mdp-cast-card:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--fg-rgb), 0.07);
 }
 
 .mdp-cast-avatar {
@@ -3695,8 +3981,8 @@ select {
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
-  background: #222;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--mdp-surface);
+  border: 1px solid rgba(var(--fg-rgb), 0.08);
 }
 
 .mdp-cast-avatar-img {
@@ -3714,7 +4000,7 @@ select {
   justify-content: center;
   font-size: 16px;
   font-weight: 800;
-  color: #555;
+  color: var(--text-muted);
 }
 
 .mdp-cast-info {
@@ -3751,8 +4037,8 @@ select {
   gap: 4px;
   padding: 14px 16px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(var(--fg-rgb), 0.04);
+  border: 1px solid rgba(var(--fg-rgb), 0.07);
 }
 
 .mdp-detail-label {
@@ -3790,8 +4076,8 @@ select {
   gap: 14px;
   padding: 20px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(var(--fg-rgb), 0.03);
+  border: 1px solid rgba(var(--fg-rgb), 0.08);
 }
 
 .mdp-review-rating-row {
@@ -3831,7 +4117,7 @@ select {
 }
 
 .mdp-star--empty {
-  color: #333;
+  color: var(--scrollbar);
 }
 
 .mdp-review-rating-val {
@@ -3855,7 +4141,7 @@ select {
 .mdp-review-textarea {
   width: 100%;
   background: rgba(0, 0, 0, 0.30);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(var(--fg-rgb), 0.09);
   border-radius: 8px;
   padding: 14px;
   font-size: 13px;
@@ -3898,7 +4184,7 @@ select {
   padding: 8px 18px;
   border-radius: 7px;
   background: var(--accent);
-  color: #000;
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 800;
   transition: all 0.15s;
@@ -3980,7 +4266,7 @@ select {
 }
 .chat__bubble--user {
   background: var(--accent);
-  color: #000;
+  color: var(--on-accent);
   font-weight: 600;
   border-bottom-right-radius: 4px;
 }
@@ -4069,7 +4355,7 @@ select {
   flex-shrink: 0;
   border-radius: 50%;
   background: var(--accent);
-  color: #000;
+  color: var(--on-accent);
   transition: all 0.13s;
 }
 .chat__send:hover:not(:disabled) { background: var(--accent-hover); transform: scale(1.05); }
@@ -4153,7 +4439,7 @@ select {
   max-width: 380px;
   max-height: calc(100vh - 32px);
   overflow-y: auto;
-  background: #18181b;
+  background: var(--popover-bg);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 24px;
@@ -4182,7 +4468,7 @@ select {
   gap: 4px;
   padding: 3px;
   margin-bottom: 14px;
-  background: #101012;
+  background: var(--field-deep);
   border-radius: var(--radius-md);
 }
 
@@ -4194,7 +4480,7 @@ select {
   color: var(--text-secondary);
 }
 
-.auth-modal__tab.is-active { background: #26262c; color: var(--text-primary); }
+.auth-modal__tab.is-active { background: var(--field-raised-hover); color: var(--text-primary); }
 
 .auth-modal__form { display: flex; flex-direction: column; }
 
@@ -4208,7 +4494,7 @@ select {
   width: 100%;
   height: 36px;
   padding: 0 11px;
-  background: #101012;
+  background: var(--field-deep);
   border: 1px solid var(--border-mid);
   border-radius: var(--radius-md);
   color: var(--text-primary);
@@ -4218,7 +4504,7 @@ select {
 .auth-modal .auth-modal__input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .auth-modal .auth-modal__input::placeholder { color: var(--text-muted); }
 .auth-modal .auth-modal__input:-webkit-autofill {
-  -webkit-box-shadow: 0 0 0 40px #101012 inset;
+  -webkit-box-shadow: 0 0 0 40px var(--field-deep) inset;
   -webkit-text-fill-color: var(--text-primary);
 }
 
@@ -4241,7 +4527,7 @@ select {
 
 .auth-modal__error {
   font-size: 12px;
-  color: #f0817f;
+  color: var(--red);
   margin: 12px 0 0;
 }
 
@@ -4294,10 +4580,10 @@ select {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  background: #1f1f24;
-  border: 1px solid #3a3a42;
+  background: var(--field-raised);
+  border: 1px solid var(--field-line);
   border-radius: 8px;
-  color: #e8e8ea;
+  color: var(--text-primary);
   font-family: inherit;
   font-size: 12.5px;
   font-weight: 500;
@@ -4305,8 +4591,8 @@ select {
 }
 
 .google-btn:hover .google-btn__face {
-  background: #26262c;
-  border-color: #4a4a54;
+  background: var(--field-raised-hover);
+  border-color: var(--field-line-hover);
 }
 
 .google-btn__hit {
@@ -4321,3 +4607,24 @@ select {
 
 .auth-modal__google .google-btn { margin: 0; }
 .auth-modal .google-btn__face { font-size: 13px; }
+
+/* ==========================================================================
+   LIGHT THEME ADJUSTMENTS
+   Spots where the dark value isn't a token because it's a one-off.
+   ========================================================================== */
+
+/* Dialog backdrops: a lighter dim reads better over a white page */
+:root[data-theme='light'] .modal-overlay,
+:root[data-theme='light'] .st-overlay,
+:root[data-theme='light'] .m-scrim {
+  background: rgba(24, 24, 32, 0.32);
+}
+
+:root[data-theme='light'] .mdp-review-textarea {
+  background: var(--bg-raised);
+}
+
+:root[data-theme='light'] .auth-modal__tab.is-active {
+  background: var(--bg-raised);
+  box-shadow: 0 1px 2px rgba(24, 24, 32, 0.08);
+}

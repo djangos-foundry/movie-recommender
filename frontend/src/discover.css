@@ -433,7 +433,7 @@
   flex-direction: column;
   gap: 26px;
   scrollbar-width: thin;
-  scrollbar-color: #333 transparent;
+  scrollbar-color: var(--scrollbar) transparent;
 }
 
 .dz-round__head {
@@ -672,7 +672,7 @@
 
 .dz-notice--error {
   border-color: rgba(248, 113, 113, 0.5);
-  color: #fca5a5;
+  color: var(--red-text);
 }
 
 .dz-spinner {
@@ -894,7 +894,7 @@ input.dz-step__input {
   flex-direction: column;
   gap: 20px;
   scrollbar-width: thin;
-  scrollbar-color: #333 transparent;
+  scrollbar-color: var(--scrollbar) transparent;
 }
 
 .dz-chips {
@@ -996,7 +996,7 @@ input.dz-step__input {
 }
 
 .dz-collapse__row:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--fg-rgb), 0.04);
   color: var(--dz-text);
 }
 
@@ -1036,7 +1036,7 @@ input.dz-step__input {
   max-height: 150px;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: #333 transparent;
+  scrollbar-color: var(--scrollbar) transparent;
 }
 
 .dz-filters__foot {

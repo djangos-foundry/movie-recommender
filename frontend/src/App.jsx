@@ -15,7 +15,8 @@ import MobileMore from './components/MobileMore';
 import useIsMobile from './lib/useIsMobile';
 import './mobile.css';
 import { DEFAULT_SHORTCUTS, matchesShortcut, loadShortcuts, isBareKey, isTypingTarget } from './lib/shortcuts';
-import { loadPrefs, savePrefs, applyAccent } from './lib/prefs';
+import { itemKey, titleKey } from './lib/media';
+import { loadPrefs, savePrefs, applyAccent, applyTheme, resolveTheme, watchSystemTheme } from './lib/prefs';
 import {
   getLists,
   createList,
@@ -80,7 +81,15 @@ export default function App() {
   // User preferences (accent, Discover defaults, poster size), persisted to localStorage
   const [prefs, setPrefs] = useState(loadPrefs);
   useEffect(() => { savePrefs(prefs); }, [prefs]);
-  useEffect(() => { applyAccent(prefs.accent); }, [prefs.accent]);
+  // Theme: Dark (default), Light, or System (follows the OS, live)
+  const [resolvedTheme, setResolvedTheme] = useState(() => resolveTheme(prefs.theme));
+  useEffect(() => {
+    setResolvedTheme(resolveTheme(prefs.theme));
+    if (prefs.theme !== 'system') return undefined;
+    return watchSystemTheme(() => setResolvedTheme(resolveTheme('system')));
+  }, [prefs.theme]);
+  useEffect(() => { applyTheme(resolvedTheme); }, [resolvedTheme]);
+  useEffect(() => { applyAccent(prefs.accent, resolvedTheme); }, [prefs.accent, resolvedTheme]);
   const handlePrefsChange = useCallback((patch) => setPrefs((prev) => ({ ...prev, ...patch })), []);
 
   // Bumped by Settings to ask Discover to wipe its round history
@@ -279,7 +288,7 @@ export default function App() {
     const counts = { plan_to_watch: 0, watching: 0, completed: 0 };
     const seen = new Set();
     for (const item of allMovies) {
-      const mId = item.movie?.tmdb_id || item.movie?.id || item.id;
+      const mId = itemKey(item);
       if (!seen.has(mId)) {
         seen.add(mId);
         if (item.status === 'plan_to_watch') counts.plan_to_watch++;
@@ -294,7 +303,7 @@ export default function App() {
   const totalAllCount = useMemo(() => {
     const seen = new Set();
     for (const item of allMovies) {
-      const mId = item.movie?.tmdb_id || item.movie?.id || item.id;
+      const mId = itemKey(item);
       seen.add(mId);
     }
     return seen.size;
@@ -306,7 +315,7 @@ export default function App() {
       const seen = new Set();
       const result = [];
       for (const item of allMovies) {
-        const mId = item.movie?.tmdb_id || item.movie?.id || item.id;
+        const mId = itemKey(item);
         if (!seen.has(mId)) {
           seen.add(mId);
           result.push(item);
@@ -320,7 +329,7 @@ export default function App() {
       const result = [];
       for (const item of allMovies) {
         if (item.status === 'plan_to_watch') {
-          const mId = item.movie?.tmdb_id || item.movie?.id || item.id;
+          const mId = itemKey(item);
           if (!seen.has(mId)) {
             seen.add(mId);
             result.push(item);
@@ -335,7 +344,7 @@ export default function App() {
       const result = [];
       for (const item of allMovies) {
         if (item.status === 'watching') {
-          const mId = item.movie?.tmdb_id || item.movie?.id || item.id;
+          const mId = itemKey(item);
           if (!seen.has(mId)) {
             seen.add(mId);
             result.push(item);
@@ -350,7 +359,7 @@ export default function App() {
       const result = [];
       for (const item of allMovies) {
         if (item.status === 'completed') {
-          const mId = item.movie?.tmdb_id || item.movie?.id || item.id;
+          const mId = itemKey(item);
           if (!seen.has(mId)) {
             seen.add(mId);
             result.push(item);
@@ -723,14 +732,14 @@ export default function App() {
   // Set of movie IDs in the active list (for search modal to show 'Added')
   const existingMovieIds = useMemo(() => {
     return new Set(
-      displayedMovies.map((item) => item.movie?.tmdb_id || item.movie?.id).filter(Boolean)
+      displayedMovies.map((item) => titleKey(item.movie)).filter(Boolean)
     );
   }, [displayedMovies]);
 
   // Every movie anywhere in the library - used to mark recommendations already saved
   const allLibraryMovieIds = useMemo(() => {
     return new Set(
-      allMovies.map((item) => item.movie?.tmdb_id || item.movie?.id).filter(Boolean)
+      allMovies.map((item) => titleKey(item.movie)).filter(Boolean)
     );
   }, [allMovies]);
 
@@ -746,8 +755,8 @@ export default function App() {
     setPreviewMovie(movie);
     setViewMode('movie-preview');
     try {
-      const full = await getTMDBMovie(movie.tmdb_id);
-      setPreviewMovie((current) => (current && current.tmdb_id === movie.tmdb_id ? { ...movie, ...full } : current));
+      const full = await getTMDBMovie(movie.tmdb_id, movie.media_type);
+      setPreviewMovie((current) => (current && titleKey(current) === titleKey(movie) ? { ...movie, ...full } : current));
     } catch (err) {
       console.warn('Could not load full movie details:', err);
     }
@@ -925,6 +934,7 @@ export default function App() {
         prefs={prefs}
         onPrefsChange={handlePrefsChange}
         onClearDiscoverHistory={() => setClearDiscoverSignal((n) => n + 1)}
+        resolvedTheme={resolvedTheme}
       />
 
       {/* TMDB Search Modal */}
@@ -935,6 +945,7 @@ export default function App() {
         lists={lists}
         onAddMovie={handleAddMovie}
         existingMovieIds={existingMovieIds}
+        includeTv={prefs.includeTv}
       />
 
       {/* New List Modal */}

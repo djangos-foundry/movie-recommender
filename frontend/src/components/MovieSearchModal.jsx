@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, Star, Plus, Check, Loader2, Film } from 'lucide-react';
 import { searchTMDB, LIBRARY } from '../api/client';
 import ListPicker from './ListPicker';
+import { isTv, titleKey } from '../lib/media';
 
 // Inline TMDB logo SVG (official blue T badge)
 function TmdbBadge() {
@@ -19,6 +20,7 @@ export default function MovieSearchModal({
   lists = [],
   onAddMovie,
   existingMovieIds = new Set(),
+  includeTv = false, // Settings > Library > Include TV shows
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -52,7 +54,7 @@ export default function MovieSearchModal({
     const t = setTimeout(async () => {
       try {
         setIsLoading(true); setError('');
-        const data = await searchTMDB(query);
+        const data = await searchTMDB(query, 1, { includeTv });
         setResults(data.results || []);
       } catch (err) {
         setError(err.message || 'Search failed. Backend may still be starting.');
@@ -61,18 +63,18 @@ export default function MovieSearchModal({
       }
     }, 350);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, includeTv]);
 
   if (!isOpen) return null;
 
   const handleAdd = async (movie) => {
     const listId = targetListId || lists[0]?.id || LIBRARY;
     try {
-      setAddingId(movie.id); setError('');
+      setAddingId(titleKey(movie)); setError('');
       await onAddMovie(listId, movie);
-      setAddedIds((prev) => new Set([...prev, movie.id]));
+      setAddedIds((prev) => new Set([...prev, titleKey(movie)]));
     } catch (err) {
-      setError(err.message || 'Failed to add movie');
+      setError(err.message || `Failed to add ${isTv(movie) ? 'show' : 'movie'}`);
     } finally {
       setAddingId(null);
     }
@@ -87,7 +89,7 @@ export default function MovieSearchModal({
         {/* ── Header ── */}
         <div className="amm__header">
           <div className="amm__header-left">
-            <h3 className="amm__title">Add Movie</h3>
+            <h3 className="amm__title">{includeTv ? 'Add Movie or Show' : 'Add Movie'}</h3>
           </div>
 
           <div className="amm__header-right">
@@ -107,7 +109,7 @@ export default function MovieSearchModal({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search for a movie title…"
+            placeholder={includeTv ? 'Search for a movie or TV show…' : 'Search for a movie title…'}
             className="amm__search-input"
           />
           {query && (
@@ -137,7 +139,7 @@ export default function MovieSearchModal({
           {!isLoading && !query && (
             <div className="amm__state">
               <div className="amm__state-icon"><Film size={28} /></div>
-              <p className="amm__state-title">Find a movie to add</p>
+              <p className="amm__state-title">{includeTv ? 'Find a movie or show to add' : 'Find a movie to add'}</p>
               <p className="amm__state-hint">Start typing a title above to search the database</p>
             </div>
           )}
@@ -151,13 +153,15 @@ export default function MovieSearchModal({
           )}
 
           {!isLoading && results.map((movie) => {
-            const year = getYear(movie.release_date);
+            const tv = isTv(movie);
+            const key = titleKey(movie);
+            const year = getYear(movie.release_date); // search results don't say whether a show has ended
             const rating = movie.vote_average ? Number(movie.vote_average).toFixed(1) : null;
-            const alreadyAdded = existingMovieIds.has(movie.id) || addedIds.has(movie.id);
-            const isAdding = addingId === movie.id;
+            const alreadyAdded = existingMovieIds.has(key) || addedIds.has(key);
+            const isAdding = addingId === key;
 
             return (
-              <div key={movie.id} className="amm__result-row">
+              <div key={key} className="amm__result-row">
                 {/* Poster */}
                 <div className="amm__result-poster">
                   {movie.poster_path ? (
@@ -178,6 +182,7 @@ export default function MovieSearchModal({
                   <div className="amm__result-title-row">
                     <span className="amm__result-title">{movie.title}</span>
                     {year && <span className="amm__result-year">{year}</span>}
+                    {tv && <span className="tv-tag">TV</span>}
                   </div>
                   {rating && (
                     <div className="amm__result-rating">

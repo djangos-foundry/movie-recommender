@@ -114,7 +114,7 @@ export default function ScheduleSidebar({
           <div className="sc-glance__row">{formatDuration(glance.totalMinutes)} of watch time</div>
           {glance.next && (
             <div className="sc-glance__row">
-              Next: {glance.next.movie?.title} · {glance.next.start.toLocaleDateString(undefined, { weekday: 'short' })}{' '}
+              Next: {glance.next.title || glance.next.movie?.title} · {glance.next.start.toLocaleDateString(undefined, { weekday: 'short' })}{' '}
               {formatTime(glance.next.start)}
             </div>
           )}

@@ -8,6 +8,7 @@ class MovieSerializer(serializers.ModelSerializer):
         model = Movie
         fields = [
             'id',
+            'media_type',
             'tmdb_id',
             'title',
             'original_title',
@@ -33,6 +34,12 @@ class MovieSerializer(serializers.ModelSerializer):
             'release_status',
             'original_language',
             'production_countries',
+            'number_of_seasons',
+            'number_of_episodes',
+            'seasons',
+            'networks',
+            'last_air_date',
+            'next_episode_to_air',
             'raw_data',
             'created_at',
         ]
@@ -53,6 +60,8 @@ class MovieListItemSerializer(serializers.ModelSerializer):
             'status',
             'user_rating',
             'user_notes',
+            'current_season',
+            'current_episode',
             'added_at',
         ]
         read_only_fields = ['id', 'list', 'added_at']
@@ -100,6 +109,8 @@ class ScheduledWatchSerializer(serializers.ModelSerializer):
             'start_time',
             'end_time',
             'notes',
+            'season_number',
+            'episode_number',
             'is_watched',
             'google_event_id',
             'sync_status',
@@ -161,6 +172,7 @@ class TrashedItemSerializer(serializers.ModelSerializer):
 
 class AddMovieToListSerializer(serializers.Serializer):
     tmdb_id = serializers.IntegerField(required=False)
+    media_type = serializers.ChoiceField(choices=Movie.MEDIA_TYPES, required=False)
     movie = serializers.DictField(required=False)
     status = serializers.ChoiceField(
         choices=MovieListItem.STATUS_CHOICES,

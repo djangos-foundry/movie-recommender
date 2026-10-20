@@ -12,6 +12,7 @@ from .views import (
     MovieListItemDetailView,
     TMDBSearchView,
     TMDBMovieDetailView,
+    TMDBTvDetailView,
     RecommendationView,
     RecommendationFiltersView,
     ChatRecommendView,
@@ -51,6 +52,7 @@ urlpatterns = [
     # TMDB Integration
     path('tmdb/search/', TMDBSearchView.as_view(), name='tmdb-search'),
     path('tmdb/movie/<int:tmdb_id>/', TMDBMovieDetailView.as_view(), name='tmdb-movie-detail'),
+    path('tmdb/tv/<int:tmdb_id>/', TMDBTvDetailView.as_view(), name='tmdb-tv-detail'),
 
     # Recommendations
     path('recommendations/', RecommendationView.as_view(), name='recommendations'),

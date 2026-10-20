@@ -1,10 +1,14 @@
 // Pure logic for the Schedule section: no React, no network. Mirrors the
 // style of discoverEngine.js.
 
-/** Runtime in minutes, defaulting to 2h for movies TMDB didn't give one for. */
+import { isTv, titleKey, nextEpisode, watchTitle } from './media';
+
+/** Runtime in minutes (one episode for a show), defaulting to 2h for movies and
+ * 45m for shows TMDB didn't give one for. */
 export function runtimeOf(movie) {
   const rt = Number(movie?.runtime);
-  return rt > 0 ? rt : 120;
+  if (rt > 0) return rt;
+  return isTv(movie) ? 45 : 120;
 }
 
 export function formatDuration(minutes) {
@@ -75,13 +79,26 @@ export function defaultStartTime(date = new Date()) {
 /** One distinct movie per key, deduped the same way Discover dedups list items. */
 export function buildMovieOptions(items) {
   const byKey = new Map();
+  const progress = new Map(); // show key -> furthest [season, episode] across its list items
   for (const item of items) {
     const movie = item.movie;
     if (!movie) continue;
-    const key = movie.tmdb_id || movie.id;
+    const key = titleKey(movie);
     if (!byKey.has(key)) byKey.set(key, movie);
+    if (isTv(movie) && item.current_season != null && item.current_episode != null) {
+      const p = [item.current_season, item.current_episode];
+      const best = progress.get(key);
+      if (!best || p[0] > best[0] || (p[0] === best[0] && p[1] > best[1])) progress.set(key, p);
+    }
   }
-  return [...byKey.values()].sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  // A show carries the episode to schedule next ("nextUp"), from your progress
+  return [...byKey.entries()]
+    .map(([key, movie]) => {
+      if (!isTv(movie)) return movie;
+      const [season, episode] = progress.get(key) || [null, null];
+      return { ...movie, nextUp: nextEpisode(movie, season, episode) || { season, episode } };
+    })
+    .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
 }
 
 /** Map a backend ScheduledWatch record into the shape our calendar components use. */
@@ -89,6 +106,9 @@ export function toEventRecord(watch) {
   return {
     id: watch.id,
     movie: watch.movie,
+    season: watch.season_number ?? null,
+    episode: watch.episode_number ?? null,
+    title: watchTitle(watch.movie, watch.season_number, watch.episode_number),
     start: new Date(watch.start_time),
     end: new Date(watch.end_time),
     notes: watch.notes || '',

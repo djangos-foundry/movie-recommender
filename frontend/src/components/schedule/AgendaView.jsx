@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Film, Clock, CheckCircle2, MoreVertical, Pencil, Trash2, CalendarClock } from 'lucide-react';
 import { groupForAgenda, groupByMonth, formatDayLabel, formatTime, formatDuration, runtimeOf, toDateInputValue } from '../../lib/scheduleEngine';
+import { titleKey } from '../../lib/media';
 
 // A light "days away" hint for upcoming cards — Today/overdue already read
 // clearly from their group heading, so this only kicks in for the next week.
@@ -77,7 +78,7 @@ export default function AgendaView({
           <h4 className="sc-agenda__group-title">{group.label}</h4>
           {group.items.map((ev) => {
             const daysAway = !ev.isWatched ? daysAwayLabel(ev.start) : null;
-            const infoKey = ev.movie?.tmdb_id || ev.movie?.id;
+            const infoKey = titleKey(ev.movie);
             const info = movieListInfo.get(infoKey);
             const statusMeta = info?.status ? STATUS_META[info.status] : null;
             const isMenuOpen = openMenuId === ev.id;
@@ -101,7 +102,7 @@ export default function AgendaView({
 
                 <div className="sc-agenda-card__body">
                   <button type="button" className="sc-agenda-card__title" onClick={() => onEdit(ev)}>
-                    {ev.movie?.title}
+                    {ev.title || ev.movie?.title}
                   </button>
                   <div className="sc-agenda-card__meta">
                     <Clock size={12} />

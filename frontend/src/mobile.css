@@ -183,7 +183,7 @@
     padding: 0 4px;
     border-radius: 99px;
     background: var(--accent);
-    color: #000;
+    color: var(--on-accent);
     font-size: 10px;
     font-weight: 700;
     line-height: 16px;
@@ -248,6 +248,16 @@
   .app-shell--mobile .movie-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     --card-gap: 10px;
+  }
+
+  /* Cards fill their column instead of the desktop's fixed poster-size width */
+  .app-shell--mobile .movie-card {
+    width: auto;
+    min-width: 0;
+  }
+
+  .app-shell--mobile .movie-card__title {
+    font-size: 12px;
   }
 
   /* Touch has no hover, so the remove button is always visible */
@@ -418,7 +428,7 @@
     justify-content: center;
     border-radius: 16px;
     background: var(--accent);
-    color: #000;
+    color: var(--on-accent);
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
   }
 
@@ -626,5 +636,12 @@
 
   .m-more__chevron {
     color: var(--text-muted) !important;
+  }
+}
+
+/* A show's seasons list: drop the progress bar on phones, the "5 of 10" text says it */
+@media (max-width: 767px) {
+  .mdp-season__bar {
+    display: none;
   }
 }

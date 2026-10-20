@@ -21,6 +21,7 @@ import {
   analyzeLibraryAsk,
   toBackendFilters,
 } from '../lib/discoverEngine';
+import { titleKey } from '../lib/media';
 
 const STORE_KEY = 'cinetrack_discover';
 const MAX_ROUNDS = 40;
@@ -508,7 +509,7 @@ export default function Discover({
           status={c.status}
           isWeb={c.web}
           isBookmarked={isBookmarked(c.web ? 'web' : 'library', c.key)}
-          inLibrary={Boolean(c.rec) || libraryIds.has(c.movie.tmdb_id)}
+          inLibrary={Boolean(c.rec) || libraryIds.has(titleKey(c.movie))}
           isAdding={addingKey === c.movie.tmdb_id}
           onOpen={c.rec ? () => onOpenItem?.(c.rec.items[0]) : () => onPreviewWeb?.(c.movie)}
           onToggleBookmark={() => toggleBookmark(c.web ? 'web' : 'library', c.key, c.movie)}
