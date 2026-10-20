@@ -19,6 +19,7 @@ export const DEFAULT_PREFS = {
   keepHistory: true,
   showFilterChips: true,
   cardSize: 'medium',
+  includeTv: false, // Add dialog also searches TV shows
   filtersOpen: false,
   showEventList: true,
   showEventStatus: false,

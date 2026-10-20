@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Film, Plus, X } from 'lucide-react';
 import { Draggable } from '@fullcalendar/interaction';
 import { formatDuration, runtimeOf } from '../../lib/scheduleEngine';
+import { isTv, titleKey } from '../../lib/media';
 
 // Right panel for Calendar: a searchable, draggable tray of library movies
 // (optionally narrowed to one "Show list" from the left sidebar). Dragging a
@@ -70,7 +71,7 @@ export default function ScheduleLibraryPanel({ isOpen = true, movieOptions = [],
         ) : (
           filtered.map((m) => (
             <div
-              key={m.tmdb_id || m.id}
+              key={titleKey(m)}
               className="sc-tray-item"
               draggable="true"
               data-movie-id={m.id}
@@ -85,7 +86,10 @@ export default function ScheduleLibraryPanel({ isOpen = true, movieOptions = [],
               </div>
               <div className="sc-tray-item__info">
                 <strong>{m.title}</strong>
-                <span>{(m.release_date || '').slice(0, 4)} · {formatDuration(runtimeOf(m))}</span>
+                <span>
+                  {isTv(m) && <span className="tv-tag">TV</span>}
+                  {(m.release_date || '').slice(0, 4)} · {formatDuration(runtimeOf(m))}{isTv(m) ? ' / episode' : ''}
+                </span>
               </div>
               <button
                 type="button"

@@ -206,6 +206,9 @@ export default function SettingsModal({
                     onChange={(id) => onPrefsChange({ cardSize: id })}
                   />
                 </Row>
+                <Row title="Include TV shows" description="Find shows too when you add a title.">
+                  <Switch label="Include TV shows" checked={prefs.includeTv} onChange={(v) => onPrefsChange({ includeTv: v })} />
+                </Row>
               </div>
             )}
 

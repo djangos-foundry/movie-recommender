@@ -4,6 +4,8 @@
 // item that holds it: { key, movie, items }. A movie filed in three lists is
 // still one record, so filing habits never skew the draw.
 
+import { isTv, titleKey } from './media';
+
 export const MAX_DRAW = 20;
 export const MIN_DRAW = 1;
 
@@ -46,7 +48,7 @@ export function normalizeTitle(s) {
 }
 
 export function movieKey(movie, fallback) {
-  return movie?.tmdb_id || movie?.id || fallback;
+  return titleKey(movie, fallback);
 }
 
 export function movieYear(movie) {
@@ -61,10 +63,12 @@ function castNames(movie) {
     .filter(Boolean);
 }
 
-/** Collapse the per-list items into one record per distinct movie. */
+/** Collapse the per-list items into one record per distinct movie. TV shows are
+ * left out: Discover only recommends movies for now. */
 export function buildRecords(items) {
   const byKey = new Map();
   for (const item of items) {
+    if (isTv(item.movie)) continue;
     const key = movieKey(item.movie, `item-${item.id}`);
     const existing = byKey.get(key);
     if (existing) existing.items.push(item);

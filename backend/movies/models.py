@@ -42,7 +42,18 @@ class MovieList(models.Model):
 
 
 class Movie(models.Model):
-    tmdb_id = models.IntegerField(unique=True)
+    """A movie or, with media_type='tv', a TV show. Shows reuse the movie
+    columns where TMDB has an equivalent (name -> title, first_air_date ->
+    release_date, episode length -> runtime, creators -> director) and add a
+    few of their own below."""
+    MEDIA_TYPES = [
+        ('movie', 'Movie'),
+        ('tv', 'TV show'),
+    ]
+
+    media_type = models.CharField(max_length=5, choices=MEDIA_TYPES, default='movie', db_index=True)
+    # TMDB numbers movies and shows separately, so an id is only unique per media_type
+    tmdb_id = models.IntegerField()
     title = models.CharField(max_length=500)
     original_title = models.CharField(max_length=500, blank=True, default='')
     tagline = models.CharField(max_length=500, blank=True, default='')
@@ -67,11 +78,21 @@ class Movie(models.Model):
     release_status = models.CharField(max_length=50, blank=True, default='')
     original_language = models.CharField(max_length=20, blank=True, default='')
     production_countries = models.JSONField(default=list, blank=True)
+    # TV only: release_status holds "Returning Series" / "Ended" for shows
+    number_of_seasons = models.IntegerField(null=True, blank=True)
+    number_of_episodes = models.IntegerField(null=True, blank=True)
+    seasons = models.JSONField(default=list, blank=True)
+    networks = models.JSONField(default=list, blank=True)
+    last_air_date = models.CharField(max_length=50, blank=True, default='')
+    next_episode_to_air = models.JSONField(null=True, blank=True)
     raw_data = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['title']
+        constraints = [
+            models.UniqueConstraint(fields=['media_type', 'tmdb_id'], name='unique_media_type_tmdb_id'),
+        ]
 
     def __str__(self):
         return self.title
@@ -95,6 +116,9 @@ class ScheduledWatch(models.Model):
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
     notes = models.TextField(blank=True, default='')
+    # Which episode, when the title is a TV show
+    season_number = models.PositiveSmallIntegerField(null=True, blank=True)
+    episode_number = models.PositiveSmallIntegerField(null=True, blank=True)
     is_watched = models.BooleanField(default=False)
     google_event_id = models.CharField(max_length=255, blank=True, default='')
     sync_status = models.CharField(max_length=12, choices=SYNC_CHOICES, default='not_synced')
@@ -130,6 +154,9 @@ class MovieListItem(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(10)]
     )
     user_notes = models.TextField(blank=True, default='')
+    # TV shows: the last episode watched ("up to S2E5"); empty for movies
+    current_season = models.PositiveSmallIntegerField(null=True, blank=True)
+    current_episode = models.PositiveSmallIntegerField(null=True, blank=True)
     added_at = models.DateTimeField(auto_now_add=True)
     deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
 

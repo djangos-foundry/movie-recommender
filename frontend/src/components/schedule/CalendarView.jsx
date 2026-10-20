@@ -18,7 +18,7 @@ const CalendarView = forwardRef(function CalendarView(
 ) {
   const fcEvents = events.map((ev) => ({
     id: String(ev.id),
-    title: ev.movie?.title || 'Untitled',
+    title: ev.title || ev.movie?.title || 'Untitled',
     start: ev.start,
     end: ev.end,
     editable: !ev.isPending,

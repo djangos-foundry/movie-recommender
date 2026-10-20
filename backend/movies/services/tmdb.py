@@ -38,6 +38,23 @@ GENRE_MAP = {
     37: "Western",
 }
 
+# TV-only genre ids. Kept apart from GENRE_MAP so movie discovery never sends a
+# TV genre id to /discover/movie; the ids TV shares with movies (Drama, Comedy,
+# Crime...) come from GENRE_MAP.
+TV_GENRE_MAP = {
+    10759: "Action & Adventure",
+    10762: "Kids",
+    10763: "News",
+    10764: "Reality",
+    10765: "Sci-Fi & Fantasy",
+    10766: "Soap",
+    10767: "Talk",
+    10768: "War & Politics",
+}
+
+# Fallback episode length (minutes) when TMDB doesn't know a show's runtime
+DEFAULT_EPISODE_RUNTIME = 45
+
 # Reverse lookup so a stored genre name can be turned back into a TMDB genre id
 GENRE_NAME_TO_ID = {name.lower(): gid for gid, name in GENRE_MAP.items()}
 
@@ -438,14 +455,46 @@ def format_backdrop_url(path):
     return f"{TMDB_IMAGE_BASE_URL}/original{path}"
 
 
-def normalize_genres(raw_genres, genre_ids=None):
+def normalize_genres(raw_genres, genre_ids=None, genre_map=GENRE_MAP):
     if raw_genres and isinstance(raw_genres, list):
         if len(raw_genres) > 0 and isinstance(raw_genres[0], dict):
             return [g.get("name") for g in raw_genres if g.get("name")]
         return [str(g) for g in raw_genres]
     if genre_ids and isinstance(genre_ids, list):
-        return [GENRE_MAP.get(gid, "Movie") for gid in genre_ids if gid in GENRE_MAP]
+        return [genre_map[gid] for gid in genre_ids if gid in genre_map]
     return []
+
+
+def _tv_search_item(item):
+    """A /search/multi show entry in the movie search-result shape."""
+    return {
+        "id": item.get("id"),
+        "tmdb_id": item.get("id"),
+        "media_type": "tv",
+        "title": item.get("name", ""),
+        "original_title": item.get("original_name", ""),
+        "overview": item.get("overview", ""),
+        "poster_path": format_poster_url(item.get("poster_path")),
+        "backdrop_path": format_backdrop_url(item.get("backdrop_path")),
+        "release_date": item.get("first_air_date", ""),
+        "vote_average": float(item.get("vote_average") or 0.0),
+        "vote_count": int(item.get("vote_count") or 0),
+        "genres": normalize_genres(None, item.get("genre_ids", []), {**GENRE_MAP, **TV_GENRE_MAP}),
+        "runtime": 0,
+    }
+
+
+def _episode_ref(ep):
+    """The few fields of a TMDB episode object worth keeping (next/last to air)."""
+    if not ep:
+        return None
+    return {
+        "season_number": ep.get("season_number"),
+        "episode_number": ep.get("episode_number"),
+        "name": ep.get("name", ""),
+        "air_date": ep.get("air_date", ""),
+        "runtime": ep.get("runtime"),
+    }
 
 
 class TMDBService:
@@ -480,6 +529,7 @@ class TMDBService:
                         formatted_results.append({
                             "id": item.get("id"),
                             "tmdb_id": item.get("id"),
+                            "media_type": "movie",
                             "title": item.get("title", ""),
                             "original_title": item.get("original_title", ""),
                             "overview": item.get("overview", ""),
@@ -508,6 +558,36 @@ class TMDBService:
 
         # Fallback to rich mock search
         return self._mock_search(clean_query, page=page)
+
+    def search_multi(self, query, page=1):
+        """Search movies and TV shows together (/search/multi), dropping people.
+        Each result carries media_type. Falls back to the movie-only search."""
+        if self.api_key and (query or "").strip():
+            try:
+                response = _http.get(
+                    f"{self.BASE_URL}/search/multi",
+                    params={"api_key": self.api_key, "query": query, "page": page, "include_adult": False},
+                    timeout=4,
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    results = []
+                    for item in data.get("results", []):
+                        kind = item.get("media_type")
+                        if kind == "tv":
+                            results.append(_tv_search_item(item))
+                        elif kind == "movie":
+                            results.append({**self._format_list_item(item), "media_type": "movie"})
+                    return {
+                        "page": data.get("page", 1),
+                        "results": results,
+                        "total_results": data.get("total_results", len(results)),
+                        "total_pages": data.get("total_pages", 1),
+                    }
+                logger.warning("TMDB multi search returned %s. Falling back to movies.", response.status_code)
+            except Exception as e:
+                logger.warning("TMDB multi search failed (%s). Falling back to movies.", e)
+        return self.search_movies(query, page=page)
 
     def search_person(self, query):
         """
@@ -900,6 +980,104 @@ class TMDBService:
             "production_companies": [],
             "raw_data": {},
         }
+
+    def get_tv_details(self, tmdb_id):
+        """Fetch a TV show by TMDB id, mapped onto the movie detail shape plus
+        the TV-only fields. Episode lists are not included: /tv/{id} only has
+        the per-season summary. Returns None when TMDB can't be reached."""
+        try:
+            tmdb_id_int = int(tmdb_id)
+        except (ValueError, TypeError):
+            return None
+        if not self.api_key:
+            return None
+        try:
+            response = _http.get(
+                f"{self.BASE_URL}/tv/{tmdb_id_int}",
+                params={"api_key": self.api_key, "append_to_response": "aggregate_credits,external_ids"},
+                timeout=5,
+            )
+        except Exception as e:
+            logger.warning("TMDB tv detail request failed (%s).", e)
+            return None
+        if response.status_code != 200:
+            logger.warning("TMDB tv details returned %s.", response.status_code)
+            return None
+
+        data = response.json()
+        cast_list = []
+        for c in (data.get("aggregate_credits") or {}).get("cast", [])[:12]:
+            roles = c.get("roles") or [{}]
+            cast_list.append({
+                "id": c.get("id"),
+                "name": c.get("name"),
+                "character": roles[0].get("character", ""),
+                "profile_path": format_poster_url(c.get("profile_path")),
+            })
+        creators = data.get("created_by") or []
+        crew = [{
+            "id": p.get("id"),
+            "name": p.get("name", ""),
+            "job": "Creator",
+            "department": "Writing",
+            "profile_path": format_poster_url(p.get("profile_path")),
+        } for p in creators]
+
+        # episode_run_time is often empty for newer shows
+        last_episode = _episode_ref(data.get("last_episode_to_air"))
+        run_times = data.get("episode_run_time") or []
+        runtime = (run_times[0] if run_times else None) or (last_episode or {}).get("runtime") or DEFAULT_EPISODE_RUNTIME
+
+        seasons = [{
+            "season_number": s.get("season_number"),
+            "name": s.get("name", ""),
+            "episode_count": s.get("episode_count") or 0,
+            "air_date": s.get("air_date") or "",
+            "poster_path": format_poster_url(s.get("poster_path")),
+        } for s in data.get("seasons") or []]
+
+        return {
+            "id": data.get("id"),
+            "tmdb_id": data.get("id"),
+            "media_type": "tv",
+            "title": data.get("name", ""),
+            "original_title": data.get("original_name", ""),
+            "tagline": data.get("tagline", ""),
+            "overview": data.get("overview", ""),
+            "poster_path": format_poster_url(data.get("poster_path")),
+            "backdrop_path": format_backdrop_url(data.get("backdrop_path")),
+            "release_date": data.get("first_air_date") or "",
+            "last_air_date": data.get("last_air_date") or "",
+            "vote_average": float(data.get("vote_average") or 0.0),
+            "vote_count": int(data.get("vote_count") or 0),
+            "popularity": float(data.get("popularity") or 0.0),
+            "genres": normalize_genres(data.get("genres", [])),
+            "runtime": runtime,
+            "imdb_id": (data.get("external_ids") or {}).get("imdb_id") or "",
+            "budget": 0,
+            "revenue": 0,
+            "homepage": data.get("homepage", ""),
+            "spoken_languages": data.get("spoken_languages", []),
+            "production_companies": data.get("production_companies", []),
+            "cast": cast_list,
+            "director": ", ".join(p.get("name", "") for p in creators if p.get("name")),
+            "crew": crew,
+            "release_status": data.get("status", ""),
+            "original_language": data.get("original_language", ""),
+            "production_countries": data.get("production_countries", []),
+            "number_of_seasons": data.get("number_of_seasons"),
+            "number_of_episodes": data.get("number_of_episodes"),
+            "seasons": seasons,
+            "networks": [{"id": n.get("id"), "name": n.get("name", "")} for n in data.get("networks") or []],
+            "next_episode_to_air": _episode_ref(data.get("next_episode_to_air")),
+            "raw_data": data,
+        }
+
+    def get_details(self, tmdb_id, media_type="movie"):
+        """Movie or TV show details, by media_type."""
+        if media_type == "tv":
+            return self.get_tv_details(tmdb_id)
+        return self.get_movie_details(tmdb_id)
 
     def discover_movies(self, genre_names=None, page=1, min_votes=100, criteria=None,
                         status_out=None, attempts=2):

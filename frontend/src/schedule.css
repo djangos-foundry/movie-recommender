@@ -1445,3 +1445,11 @@
   font-size: 10px;
   color: var(--sc-mute);
 }
+
+/* "TV" tag before a show's year in the library tray and the dialog's picker */
+.sc-tray-item__info .tv-tag,
+.sc-picker__row-info .tv-tag {
+  margin-right: 6px;
+  padding: 2px 4px;
+  font-size: 9px;
+}

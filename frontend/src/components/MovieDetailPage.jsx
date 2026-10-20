@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LIBRARY } from '../api/client';
 import ListPicker from './ListPicker';
 import { getListIcon } from './NewListModal';
@@ -17,7 +17,20 @@ import {
   Library,
   Plus,
   Loader2,
+  Tv,
+  Minus,
+  Radio,
 } from 'lucide-react';
+import {
+  isTv,
+  yearLabel,
+  seasonsLabel,
+  episodeCode,
+  nextEpisode,
+  previousEpisode,
+  orderedSeasons,
+  watchedInSeason,
+} from '../lib/media';
 
 const STATUS_OPTIONS = [
   {
@@ -64,6 +77,10 @@ export default function MovieDetailPage({
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  // TV progress: the last episode watched, or nulls before starting
+  const [progress, setProgress] = useState({ season: item?.current_season ?? null, episode: item?.current_episode ?? null });
+  // Latest progress, so quick repeated clicks each step from the one before
+  const progressRef = useRef(progress);
 
   useEffect(() => {
     setStatus(item?.status || 'plan_to_watch');
@@ -71,6 +88,14 @@ export default function MovieDetailPage({
     setUserNotes(item?.user_notes || '');
     setIsSaved(false);
   }, [item]);
+
+  // Progress resets only when another title opens: each save echoes the item back, and an
+  // echo from an earlier click must not wind the stepper back while you keep clicking
+  useEffect(() => {
+    progressRef.current = { season: item?.current_season ?? null, episode: item?.current_episode ?? null };
+    setProgress(progressRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item?.id]);
 
   // Preview mode defaults the destination list to "Plan to Watch"
   useEffect(() => {
@@ -94,6 +119,26 @@ export default function MovieDetailPage({
     setStatus(newStatus);
     try { await onUpdateItem(item.id, { status: newStatus }); }
     catch (err) { console.error('Failed to update status:', err); }
+  };
+
+  // Moving progress on a show you haven't started also marks it as Watching
+  const handleProgressChange = async (step) => {
+    const current = progressRef.current;
+    const next = step === 'next'
+      ? nextEpisode(movie, current.season, current.episode)
+      : previousEpisode(movie, current.season, current.episode);
+    if (step === 'next' && !next) return;
+    const season = next ? next.season : null;
+    const episode = next ? next.episode : null;
+    progressRef.current = { season, episode };
+    setProgress(progressRef.current);
+    const updates = { current_season: season, current_episode: episode };
+    if (next && status === 'plan_to_watch') {
+      setStatus('watching');
+      updates.status = 'watching';
+    }
+    try { await onUpdateItem(item.id, updates); }
+    catch (err) { console.error('Failed to update progress:', err); }
   };
 
   const handleRatingChange = async (rating) => {
@@ -136,7 +181,8 @@ export default function MovieDetailPage({
   const ListIcon = savedList ? getListIcon(savedList.icon || 'Film') : Library;
 
   // Derived data
-  const releaseYear = movie.release_date ? movie.release_date.substring(0, 4) : '';
+  const tv = isTv(movie);
+  const releaseYear = yearLabel(movie);
   const voteAvg = movie.vote_average ? Number(movie.vote_average).toFixed(1) : null;
   const genresList = Array.isArray(movie.genres) ? movie.genres : [];
 
@@ -171,6 +217,24 @@ export default function MovieDetailPage({
   const prodCountries = movie.raw_data?.production_countries?.map((c) => c.name).join(', ');
 
   const backdropUrl = movie.backdrop_path || movie.poster_path;
+
+  // TV-only bits
+  const episodesLabel = movie.number_of_episodes ? `${movie.number_of_episodes} episodes` : '';
+  const network = (movie.networks || []).map((n) => n.name).filter(Boolean).join(', ');
+  const nextAir = movie.next_episode_to_air;
+  const formatAirDate = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '');
+  let airStatus = '';
+  if (tv && movie.release_status) {
+    if (movie.release_status === 'Returning Series') {
+      airStatus = nextAir?.air_date ? `Returning · next episode ${formatAirDate(nextAir.air_date)}` : 'Returning';
+    } else {
+      airStatus = movie.release_status;
+    }
+  }
+  const started = progress.season != null && progress.episode != null;
+  const upNext = tv ? nextEpisode(movie, progress.season, progress.episode) : null;
+  const seasonList = tv ? orderedSeasons(movie) : [];
+  const progressItem = { current_season: progress.season, current_episode: progress.episode };
 
   return (
     <div className="mdp-root custom-scrollbar">
@@ -254,7 +318,10 @@ export default function MovieDetailPage({
           {/* Breadcrumb-style sub-label */}
 
           {/* Title */}
-          <h1 className="mdp-title">{movie.title}</h1>
+          <h1 className="mdp-title">
+            {movie.title}
+            {tv && <span className="tv-tag mdp-tv-tag">TV</span>}
+          </h1>
 
           {/* Original title */}
           {movie.original_title && movie.original_title !== movie.title && (
@@ -274,16 +341,33 @@ export default function MovieDetailPage({
                 {releaseYear}
               </span>
             )}
+            {tv && seasonsLabel(movie) && (
+              <span className="mdp-meta-pill">
+                <Tv size={12} className="mdp-meta-pill__icon" />
+                {[seasonsLabel(movie), episodesLabel].filter(Boolean).join(' · ')}
+              </span>
+            )}
             {movie.runtime > 0 && (
               <span className="mdp-meta-pill">
                 <Clock size={12} className="mdp-meta-pill__icon" />
-                {Math.floor(movie.runtime / 60)}h {movie.runtime % 60}m
+                {tv
+                  ? `~${movie.runtime}m / episode`
+                  : `${Math.floor(movie.runtime / 60)}h ${movie.runtime % 60}m`}
               </span>
             )}
             {directorName && (
               <span className="mdp-meta-pill">
                 <User size={12} className="mdp-meta-pill__icon" />
-                {directorName}
+                {tv ? `Created by ${directorName}` : directorName}
+              </span>
+            )}
+            {network && (
+              <span className="mdp-meta-pill">{network}</span>
+            )}
+            {airStatus && (
+              <span className={`mdp-meta-pill ${movie.release_status === 'Returning Series' ? 'mdp-meta-pill--live' : ''}`}>
+                <Radio size={12} className="mdp-meta-pill__icon" />
+                {airStatus}
               </span>
             )}
             {voteAvg && (
@@ -325,6 +409,40 @@ export default function MovieDetailPage({
             </div>
           </div>
           )}
+
+          {/* TV progress: the last episode watched */}
+          {!isPreview && tv && (
+          <div className="mdp-status-block">
+            <span className="mdp-status-block__label">Progress</span>
+            <div className="mdp-progress">
+              {started ? (
+                <div className="mdp-progress__stepper">
+                  <span className="mdp-progress__code">{episodeCode(progress.season, progress.episode)}</span>
+                  <button
+                    type="button"
+                    className="mdp-progress__btn"
+                    onClick={() => handleProgressChange('previous')}
+                    aria-label="Back one episode"
+                    title="Back one episode"
+                  >
+                    <Minus size={13} />
+                  </button>
+                </div>
+              ) : (
+                <span className="mdp-progress__none">Not started</span>
+              )}
+              {upNext && (
+                <button type="button" className="mdp-progress__next" onClick={() => handleProgressChange('next')}>
+                  <Plus size={13} />
+                  <span>{started ? '1 episode' : 'Watched S1E1'}</span>
+                </button>
+              )}
+              <span className="mdp-progress__hint">
+                {upNext ? (started ? `Next up: ${episodeCode(upNext.season, upNext.episode)}` : '') : 'All aired episodes watched'}
+              </span>
+            </div>
+          </div>
+          )}
         </div>
       </div>
 
@@ -336,6 +454,51 @@ export default function MovieDetailPage({
           <section className="mdp-section">
             <h2 className="mdp-section-title">Overview</h2>
             <p className="mdp-overview-text">{movie.overview}</p>
+          </section>
+        )}
+
+        {/* Seasons (TV): progress comes from the "up to SxEy" pointer */}
+        {tv && seasonList.length > 0 && (
+          <section className="mdp-section">
+            <h2 className="mdp-section-title">Seasons</h2>
+            <div className="mdp-seasons">
+              {seasonList.map((season) => {
+                const total = Number(season.episode_count) || 0;
+                const watched = watchedInSeason(season, progressItem);
+                const done = total > 0 && watched >= total;
+                const year = (season.air_date || '').slice(0, 4);
+                let state = 'Not started';
+                if (!season.air_date && !total) state = 'Not aired';
+                else if (done) state = 'Watched';
+                else if (watched > 0) state = `${watched} of ${total}`;
+                return (
+                  <div key={season.season_number} className="mdp-season">
+                    <div className="mdp-season__poster">
+                      {season.poster_path
+                        ? <img src={season.poster_path} alt="" loading="lazy" />
+                        : <Tv size={16} />}
+                    </div>
+                    <div className="mdp-season__info">
+                      <span className="mdp-season__name">{season.name || `Season ${season.season_number}`}</span>
+                      <span className="mdp-season__meta">
+                        {[total ? `${total} episode${total === 1 ? '' : 's'}` : '', year].filter(Boolean).join(' · ')}
+                      </span>
+                    </div>
+                    {!isPreview && total > 0 && season.season_number > 0 && (
+                      <div className="mdp-season__bar" aria-hidden="true">
+                        <i style={{ width: `${Math.round((watched / total) * 100)}%` }} className={done ? 'is-done' : ''} />
+                      </div>
+                    )}
+                    {!isPreview && season.season_number > 0 && (
+                      <span className={`mdp-season__state ${done ? 'is-done' : watched > 0 ? 'is-active' : ''}`}>
+                        {done && <CheckCircle2 size={12} />}
+                        {state}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </section>
         )}
 

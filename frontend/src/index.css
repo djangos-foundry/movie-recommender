@@ -1324,6 +1324,33 @@ body {
    STATUS BADGES
    ========================================================================== */
 
+/* Small "TV" tag that marks a TV show among movies (search results, detail title) */
+.tv-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-mid);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* On a poster it sits top-left over the artwork, so it keeps a dark chip in both themes */
+.movie-card__tv-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.72);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
 .badge {
   font-size: 10px;
   font-weight: 600;
@@ -3601,6 +3628,182 @@ select {
   border-color: rgba(245, 197, 24, 0.30);
   background: rgba(245, 197, 24, 0.08);
   color: var(--text-primary);
+}
+
+/* A show that is still airing */
+.mdp-meta-pill--live {
+  border-color: rgba(52, 211, 153, 0.30);
+  background: rgba(52, 211, 153, 0.08);
+  color: var(--green-text);
+}
+
+.mdp-tv-tag {
+  margin-left: 12px;
+  font-size: 11px;
+  vertical-align: middle;
+  position: relative;
+  top: -0.3em;
+}
+
+/* TV progress: "S2E5 [−]  [+ 1 episode]  Next up: S2E6" */
+.mdp-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mdp-progress__stepper {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--fg-rgb), 0.12);
+  background: rgba(var(--fg-rgb), 0.05);
+  overflow: hidden;
+}
+
+.mdp-progress__code {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: 0.3px;
+}
+
+.mdp-progress__btn {
+  display: grid;
+  place-items: center;
+  padding: 7px 9px;
+  border-left: 1px solid rgba(var(--fg-rgb), 0.12);
+  color: var(--text-secondary);
+}
+
+.mdp-progress__btn:hover {
+  background: rgba(var(--fg-rgb), 0.08);
+  color: var(--text-primary);
+}
+
+.mdp-progress__none {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.mdp-progress__next {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.mdp-progress__next:hover {
+  background: var(--accent-hover);
+}
+
+.mdp-progress__hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Seasons list on a show's page */
+.mdp-seasons {
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--fg-rgb), 0.07);
+  overflow: hidden;
+}
+
+.mdp-season {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: rgba(var(--fg-rgb), 0.03);
+}
+
+.mdp-season + .mdp-season {
+  border-top: 1px solid rgba(var(--fg-rgb), 0.06);
+}
+
+.mdp-season__poster {
+  width: 36px;
+  height: 54px;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(var(--fg-rgb), 0.06);
+  color: var(--text-muted);
+}
+
+.mdp-season__poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mdp-season__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mdp-season__name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.mdp-season__meta {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.mdp-season__bar {
+  width: 160px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(var(--fg-rgb), 0.08);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.mdp-season__bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.mdp-season__bar i.is-done {
+  background: var(--green);
+}
+
+.mdp-season__state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  width: 96px;
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.mdp-season__state.is-active {
+  color: var(--accent);
+}
+
+.mdp-season__state.is-done {
+  color: var(--green-text);
 }
 
 .mdp-meta-pill__sub {

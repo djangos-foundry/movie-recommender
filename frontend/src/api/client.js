@@ -116,6 +116,7 @@ export async function addMovieToList(listId, movieData, status = 'plan_to_watch'
     method: 'POST',
     body: JSON.stringify({
       tmdb_id: movieData.tmdb_id || movieData.id,
+      media_type: movieData.media_type || 'movie',
       movie: movieData,
       status,
       user_rating: userRating,
@@ -125,11 +126,14 @@ export async function addMovieToList(listId, movieData, status = 'plan_to_watch'
 }
 
 // 3. List Items (Update / Delete)
-export async function updateListItem(itemId, { status, user_rating, user_notes }) {
+export async function updateListItem(itemId, { status, user_rating, user_notes, current_season, current_episode }) {
   const payload = {};
   if (status !== undefined) payload.status = status;
   if (user_rating !== undefined) payload.user_rating = user_rating;
   if (user_notes !== undefined) payload.user_notes = user_notes;
+  // TV progress: null clears it
+  if (current_season !== undefined) payload.current_season = current_season;
+  if (current_episode !== undefined) payload.current_episode = current_episode;
 
   return await fetchJson(`/list-items/${itemId}/`, {
     method: 'PATCH',
@@ -144,14 +148,15 @@ export async function removeListItem(itemId) {
 }
 
 // 4. TMDB Search & Movie Details
-export async function searchTMDB(query, page = 1) {
+export async function searchTMDB(query, page = 1, { includeTv = false } = {}) {
   if (!query || !query.trim()) return { results: [] };
   const encoded = encodeURIComponent(query.trim());
-  return await fetchJson(`/tmdb/search/?q=${encoded}&page=${page}`);
+  const type = includeTv ? '&type=multi' : '';
+  return await fetchJson(`/tmdb/search/?q=${encoded}&page=${page}${type}`);
 }
 
-export async function getTMDBMovie(tmdbId) {
-  return await fetchJson(`/tmdb/movie/${tmdbId}/`);
+export async function getTMDBMovie(tmdbId, mediaType = 'movie') {
+  return await fetchJson(`/tmdb/${mediaType === 'tv' ? 'tv' : 'movie'}/${tmdbId}/`);
 }
 
 // 5. Recommendations (random sampling without replacement over your library's genres)
@@ -202,7 +207,7 @@ export async function getScheduledWatches({ start, end } = {}) {
   return await fetchJson(`/schedule/${qs ? `?${qs}` : ''}`);
 }
 
-export async function createScheduledWatch({ movieId, startTime, endTime, notes = '' }) {
+export async function createScheduledWatch({ movieId, startTime, endTime, notes = '', seasonNumber = null, episodeNumber = null }) {
   return await fetchJson('/schedule/', {
     method: 'POST',
     body: JSON.stringify({
@@ -210,13 +215,17 @@ export async function createScheduledWatch({ movieId, startTime, endTime, notes 
       start_time: startTime,
       end_time: endTime,
       notes,
+      season_number: seasonNumber,
+      episode_number: episodeNumber,
     }),
   });
 }
 
-export async function updateScheduledWatch(id, { movieId, startTime, endTime, notes, isWatched } = {}) {
+export async function updateScheduledWatch(id, { movieId, startTime, endTime, notes, isWatched, seasonNumber, episodeNumber } = {}) {
   const payload = {};
   if (movieId !== undefined) payload.movie_id = movieId;
+  if (seasonNumber !== undefined) payload.season_number = seasonNumber;
+  if (episodeNumber !== undefined) payload.episode_number = episodeNumber;
   if (startTime !== undefined) payload.start_time = startTime;
   if (endTime !== undefined) payload.end_time = endTime;
   if (notes !== undefined) payload.notes = notes;

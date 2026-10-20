@@ -638,3 +638,10 @@
     color: var(--text-muted) !important;
   }
 }
+
+/* A show's seasons list: drop the progress bar on phones, the "5 of 10" text says it */
+@media (max-width: 767px) {
+  .mdp-season__bar {
+    display: none;
+  }
+}

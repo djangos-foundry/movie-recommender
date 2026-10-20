@@ -567,3 +567,97 @@ class PasswordAccountTests(APITestCase):
         self.register(c)
         res = c.post('/api/calendar/connect/', {'code': 'x', 'time_zone': 'UTC'}, format='json')
         self.assertEqual(res.status_code, 403)
+
+
+class TvShowTests(APITestCase):
+    """TV shows live in the same lists as movies, keyed apart by media_type."""
+
+    SHOW = {
+        'tmdb_id': 604, 'media_type': 'tv', 'title': 'Test Show', 'overview': 'x', 'cast': [{'name': 'A'}],
+        'director': 'Creator', 'number_of_seasons': 2, 'number_of_episodes': 19, 'runtime': 50,
+        'seasons': [{'season_number': 1, 'episode_count': 9}, {'season_number': 2, 'episode_count': 10}],
+    }
+    MOVIE = {'tmdb_id': 604, 'title': 'Test Movie', 'overview': 'x', 'cast': [{'name': 'A'}], 'director': 'D'}
+
+    def add(self, client, payload):
+        with patch.object(tmdb_service, 'get_movie_details', return_value=None), \
+             patch.object(tmdb_service, 'get_tv_details', return_value=None):
+            return client.post('/api/library/movies/', {'movie': payload}, format='json')
+
+    def test_show_and_movie_with_the_same_tmdb_id_are_separate(self):
+        c = APIClient()
+        self.assertEqual(self.add(c, self.MOVIE).status_code, 201)
+        res = self.add(c, self.SHOW)
+        self.assertEqual(res.status_code, 201)
+        show = res.json()['movie']
+        self.assertEqual((show['media_type'], show['title'], show['number_of_seasons']), ('tv', 'Test Show', 2))
+        kinds = sorted(i['movie']['media_type'] for i in c.get('/api/library/movies/').json())
+        self.assertEqual(kinds, ['movie', 'tv'])
+
+    def test_existing_payloads_without_media_type_are_movies(self):
+        res = self.add(APIClient(), self.MOVIE)
+        self.assertEqual(res.json()['movie']['media_type'], 'movie')
+
+    def test_progress_is_saved_and_cleared(self):
+        c = APIClient()
+        item = self.add(c, self.SHOW).json()
+        res = c.patch(f"/api/list-items/{item['id']}/", {'current_season': 2, 'current_episode': 5}, format='json')
+        self.assertEqual((res.json()['current_season'], res.json()['current_episode']), (2, 5))
+        res = c.patch(f"/api/list-items/{item['id']}/", {'current_season': None, 'current_episode': None}, format='json')
+        self.assertIsNone(res.json()['current_episode'])
+        bad = c.patch(f"/api/list-items/{item['id']}/", {'current_episode': 'x'}, format='json')
+        self.assertEqual(bad.status_code, 400)
+
+    def test_scheduled_episode_keeps_its_season_and_episode(self):
+        c = APIClient()
+        movie_id = self.add(c, self.SHOW).json()['movie']['id']
+        res = c.post('/api/schedule/', {
+            'movie_id': movie_id, 'season_number': 2, 'episode_number': 6,
+            'start_time': '2030-01-01T20:00:00Z', 'end_time': '2030-01-01T20:50:00Z',
+        }, format='json')
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual((res.json()['season_number'], res.json()['episode_number']), (2, 6))
+
+    def test_discover_leaves_shows_out(self):
+        from .services.recommender import get_filter_options
+        c = APIClient()
+        self.add(c, self.MOVIE)
+        self.add(c, self.SHOW)
+        from django.contrib.auth import get_user_model
+        user = get_user_model().objects.get()
+        self.assertEqual(get_filter_options(user=user)['directors'], [{'value': 'D', 'count': 1}])
+
+    def test_search_type_multi_uses_multi_search(self):
+        with patch.object(tmdb_service, 'search_multi', return_value={'results': [{'id': 1, 'media_type': 'tv'}]}) as multi, \
+             patch.object(tmdb_service, 'search_movies', return_value={'results': []}) as movies:
+            self.assertEqual(self.client.get('/api/tmdb/search/?q=office&type=multi').json()['results'][0]['media_type'], 'tv')
+            self.client.get('/api/tmdb/search/?q=office')
+        multi.assert_called_once()
+        movies.assert_called_once()
+
+
+class TvDetailsMappingTests(SimpleTestCase):
+    """/tv/{id} is mapped onto the movie detail shape."""
+
+    PAYLOAD = {
+        'id': 95396, 'name': 'Severance', 'original_name': 'Severance', 'first_air_date': '2022-02-17',
+        'last_air_date': '2025-03-20', 'status': 'Returning Series', 'episode_run_time': [],
+        'last_episode_to_air': {'season_number': 2, 'episode_number': 10, 'runtime': 76, 'name': 'Cold Harbor'},
+        'next_episode_to_air': None, 'number_of_seasons': 2, 'number_of_episodes': 19,
+        'created_by': [{'id': 1, 'name': 'Dan Erickson'}], 'networks': [{'id': 2552, 'name': 'Apple TV+'}],
+        'genres': [{'id': 18, 'name': 'Drama'}],
+        'seasons': [{'season_number': 1, 'name': 'Season 1', 'episode_count': 9, 'air_date': '2022-02-17'}],
+        'aggregate_credits': {'cast': [{'id': 9, 'name': 'Adam Scott', 'roles': [{'character': 'Mark S.'}]}]},
+        'external_ids': {'imdb_id': 'tt11280740'},
+    }
+
+    def test_show_fields_map_onto_movie_shape(self):
+        with patch.object(tmdb_service, 'api_key', 'k'), \
+             patch('movies.services.tmdb._http.get', return_value=FakeResponse(200, self.PAYLOAD)):
+            d = tmdb_service.get_tv_details(95396)
+        self.assertEqual(d['media_type'], 'tv')
+        self.assertEqual((d['title'], d['release_date'], d['director']), ('Severance', '2022-02-17', 'Dan Erickson'))
+        self.assertEqual(d['runtime'], 76)  # empty episode_run_time falls back to the last episode
+        self.assertEqual(d['cast'][0]['character'], 'Mark S.')
+        self.assertEqual((d['imdb_id'], d['networks'][0]['name']), ('tt11280740', 'Apple TV+'))
+        self.assertEqual(d['seasons'][0]['episode_count'], 9)

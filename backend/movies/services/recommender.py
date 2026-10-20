@@ -63,12 +63,13 @@ def _cast_names(movie):
 
 def _library_movies(list_id=None, user=None):
     """
-    Every distinct movie across the user's lists.
+    Every distinct movie across the user's lists. TV shows are left out:
+    Discover only recommends movies for now.
 
     A movie filed in three lists is still one movie - de-duplicating here stops
     filing habits from skewing the taste profile.
     """
-    items = MovieListItem.objects.select_related('movie')
+    items = MovieListItem.objects.select_related('movie').filter(movie__media_type='movie')
     if user is not None and user.is_authenticated:
         items = items.filter(list__owner=user)
     else:

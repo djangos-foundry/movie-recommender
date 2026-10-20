@@ -179,7 +179,8 @@ def event_body(watch):
         parts.append(watch.notes)
     if movie.overview:
         parts.append(movie.overview)
-    links = [f"TMDB: https://www.themoviedb.org/movie/{movie.tmdb_id}"]
+    is_tv = movie.media_type == "tv"
+    links = [f"TMDB: https://www.themoviedb.org/{'tv' if is_tv else 'movie'}/{movie.tmdb_id}"]
     if movie.imdb_id:
         links.append(f"IMDb: https://www.imdb.com/title/{movie.imdb_id}/")
     parts.append("\n".join(links))
@@ -189,7 +190,7 @@ def event_body(watch):
     return {
         # "Movie" is one of the words Google Calendar turns into its film-projector
         # banner; the banner is chosen from the title and can't be set via the API
-        "summary": f"Movie: {movie.title}",
+        "summary": f"TV: {episode_title(watch)}" if is_tv else f"Movie: {movie.title}",
         "description": "\n\n".join(parts),
         "start": {"dateTime": watch.start_time.astimezone(utc).isoformat(), "timeZone": "UTC"},
         "end": {"dateTime": watch.end_time.astimezone(utc).isoformat(), "timeZone": "UTC"},
@@ -197,6 +198,14 @@ def event_body(watch):
         "extendedProperties": {"private": {"cinetrackWatchId": str(watch.id)}},
         "reminders": {"useDefault": True},
     }
+
+
+def episode_title(watch):
+    """'Severance · S2E6' for a show's scheduled episode, else just the title."""
+    title = watch.movie.title
+    if watch.season_number is not None and watch.episode_number is not None:
+        return f"{title} · S{watch.season_number}E{watch.episode_number}"
+    return title
 
 
 def _fail(watch, message):

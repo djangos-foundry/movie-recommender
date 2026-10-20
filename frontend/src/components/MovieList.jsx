@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { Search, Plus, Star, Film, ChevronDown, FolderOpen, X, PanelLeft } from 'lucide-react';
+import { isTv, progressLabel, seasonsLabel, yearLabel } from '../lib/media';
 
 const STATUS_BADGES = {
   plan_to_watch: { label: 'Plan to Watch', cls: 'badge--blue' },
@@ -179,7 +180,10 @@ export default function MovieList({
             {filtered.map((item) => {
               const movie = item.movie || {};
               const isSelected = selectedItemId === item.id;
-              const year = movie.release_date?.substring(0, 4) || '';
+              const tv = isTv(movie);
+              const year = yearLabel(movie);
+              const seasons = tv ? seasonsLabel(movie) : '';
+              const progress = tv && item.status === 'watching' ? progressLabel(item) : '';
               const rating = item.user_rating
                 ? Number(item.user_rating).toFixed(1)
                 : movie.vote_average && Number(movie.vote_average) > 0
@@ -223,8 +227,11 @@ export default function MovieList({
                     </button>
 
                     <div className="movie-card__gradient" />
-                    {/* Status badge */}
-                    <span className={`movie-card__status-badge badge ${badge.cls}`}>{badge.label}</span>
+                    {tv && <span className="tv-tag movie-card__tv-badge">TV</span>}
+                    {/* Status badge, with a show's progress while watching ("Watching · S2E5") */}
+                    <span className={`movie-card__status-badge badge ${badge.cls}`}>
+                      {progress ? `${badge.label} · ${progress}` : badge.label}
+                    </span>
                   </div>
 
                   {/* Info */}
@@ -232,7 +239,13 @@ export default function MovieList({
                     <h3 className="movie-card__title">{movie.title}</h3>
                     <div className="movie-card__meta">
                       {year && <span>{year}</span>}
-                      {movie.runtime > 0 && (
+                      {seasons && (
+                        <>
+                          <span className="movie-card__dot">·</span>
+                          <span>{seasons}</span>
+                        </>
+                      )}
+                      {!tv && movie.runtime > 0 && (
                         <>
                           <span className="movie-card__dot">·</span>
                           <span>{movie.runtime}m</span>

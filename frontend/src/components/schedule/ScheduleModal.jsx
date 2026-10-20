@@ -9,6 +9,7 @@ import {
   combineEndTime,
   addMinutes,
 } from '../../lib/scheduleEngine';
+import { isTv, titleKey, seasonsLabel } from '../../lib/media';
 
 const ANCHORED_WIDTH = 460;
 const ANCHORED_HEIGHT_ESTIMATE = 520;
@@ -65,6 +66,9 @@ export default function ScheduleModal({
   const [endTimeStr, setEndTimeStr] = useState('');
   const [endTouched, setEndTouched] = useState(false);
   const [notes, setNotes] = useState('');
+  // Which episode, when the pick is a TV show
+  const [season, setSeason] = useState('');
+  const [episode, setEpisode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const panelRef = useRef(null);
@@ -77,11 +81,14 @@ export default function ScheduleModal({
     if (!isOpen) return;
     if (editingEvent) {
       setMovie(editingEvent.movie);
+      setSeason(editingEvent.season != null ? String(editingEvent.season) : '');
+      setEpisode(editingEvent.episode != null ? String(editingEvent.episode) : '');
       setDateStr(toDateInputValue(editingEvent.start));
       setTimeStr(toTimeInputValue(editingEvent.start));
       setEndTimeStr(toTimeInputValue(editingEvent.end));
     } else {
       setMovie(initialMovie);
+      pickEpisode(initialMovie);
       const base = initialDate || new Date();
       setDateStr(toDateInputValue(base));
       setTimeStr(initialDate ? toTimeInputValue(initialDate) : '14:00');
@@ -102,6 +109,13 @@ export default function ScheduleModal({
     const s = combineDateTime(dateStr, timeStr);
     if (movie && s) setEndTimeStr(toTimeInputValue(addMinutes(s, runtimeOf(movie))));
   }, [movie, dateStr, timeStr, endTouched]);
+
+  // A show starts on the episode after your progress (S1E1 if not started)
+  function pickEpisode(m) {
+    const next = isTv(m) ? m.nextUp : null;
+    setSeason(next?.season != null ? String(next.season) : (isTv(m) ? '1' : ''));
+    setEpisode(next?.episode != null ? String(next.episode) : (isTv(m) ? '1' : ''));
+  }
 
   const filteredMovies = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -137,6 +151,10 @@ export default function ScheduleModal({
     e.preventDefault();
     if (!movie) { setError('Pick a movie from your library first.'); return; }
     if (!start) { setError('Choose a date and start time.'); return; }
+    const tv = isTv(movie);
+    const seasonNumber = tv && season !== '' ? Number(season) : null;
+    const episodeNumber = tv && episode !== '' ? Number(episode) : null;
+    if (tv && (!(seasonNumber >= 0) || !(episodeNumber >= 1))) { setError('Enter a season and episode number.'); return; }
     try {
       setIsSubmitting(true);
       setError('');
@@ -145,6 +163,8 @@ export default function ScheduleModal({
         startTime: start.toISOString(),
         endTime: end.toISOString(),
         notes: notes.trim(),
+        seasonNumber,
+        episodeNumber,
       });
       onClose();
     } catch (err) {
@@ -168,6 +188,7 @@ export default function ScheduleModal({
   };
 
   const year = (movie?.release_date || '').slice(0, 4);
+  const showPicked = isTv(movie);
   const rating = movie?.vote_average > 0 ? Number(movie.vote_average).toFixed(1) : null;
 
   const Wrapper = isAnchored ? React.Fragment : 'div';
@@ -191,7 +212,7 @@ export default function ScheduleModal({
           {error && <div className="nlm__error">{error}</div>}
 
           <div className="sc-field">
-            <label className="sc-field__label">Movie (from your library)</label>
+            <label className="sc-field__label">{showPicked ? 'Show (from your library)' : 'Movie (from your library)'}</label>
             {movie && !pickerOpen ? (
               <div className="sc-pick">
                 <div className="sc-pick__poster">
@@ -202,7 +223,9 @@ export default function ScheduleModal({
                 <div className="sc-pick__info">
                   <strong>{movie.title}</strong>
                   <span>
-                    {year} · {formatDuration(runtimeOf(movie))}
+                    {showPicked
+                      ? [year, seasonsLabel(movie), `~${formatDuration(runtimeOf(movie))} / episode`].filter(Boolean).join(' · ')
+                      : <>{year} · {formatDuration(runtimeOf(movie))}</>}
                     {rating && <> · <Star size={11} className="sc-star" fill="currentColor" /> {rating}</>}
                   </span>
                 </div>
@@ -228,10 +251,10 @@ export default function ScheduleModal({
                   ) : (
                     filteredMovies.map((m) => (
                       <button
-                        key={m.tmdb_id || m.id}
+                        key={titleKey(m)}
                         type="button"
                         className="sc-picker__row"
-                        onClick={() => { setMovie(m); setPickerOpen(false); setEndTouched(false); }}
+                        onClick={() => { setMovie(m); pickEpisode(m); setPickerOpen(false); setEndTouched(false); }}
                       >
                         <div className="sc-pick__poster sc-pick__poster--sm">
                           {m.poster_path
@@ -240,7 +263,10 @@ export default function ScheduleModal({
                         </div>
                         <div className="sc-picker__row-info">
                           <strong>{m.title}</strong>
-                          <span>{(m.release_date || '').slice(0, 4)} · {formatDuration(runtimeOf(m))}</span>
+                          <span>
+                            {isTv(m) && <span className="tv-tag">TV</span>}
+                            {(m.release_date || '').slice(0, 4)} · {formatDuration(runtimeOf(m))}{isTv(m) ? ' / episode' : ''}
+                          </span>
                         </div>
                       </button>
                     ))
@@ -249,6 +275,31 @@ export default function ScheduleModal({
               </div>
             )}
           </div>
+
+          {showPicked && !pickerOpen && (
+            <div className="sc-row">
+              <div className="sc-field">
+                <label className="sc-field__label">Season</label>
+                <input
+                  type="number"
+                  min="0"
+                  className="sc-input"
+                  value={season}
+                  onChange={(e) => setSeason(e.target.value)}
+                />
+              </div>
+              <div className="sc-field">
+                <label className="sc-field__label">Episode</label>
+                <input
+                  type="number"
+                  min="1"
+                  className="sc-input"
+                  value={episode}
+                  onChange={(e) => setEpisode(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="sc-row">
             <div className="sc-field">

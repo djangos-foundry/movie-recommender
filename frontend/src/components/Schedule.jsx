@@ -23,6 +23,7 @@ import {
   deleteScheduledWatch,
 } from '../api/client';
 import { loadJson, saveJson } from '../lib/prefs';
+import { titleKey, watchTitle } from '../lib/media';
 import { DEFAULT_SHORTCUTS, matchesShortcut, isBareKey, isTypingTarget } from '../lib/shortcuts';
 
 const STORE_KEY = 'cinetrack_schedule';
@@ -143,7 +144,7 @@ export default function Schedule({
     for (const item of items) {
       const movie = item.movie;
       if (!movie) continue;
-      const key = movie.tmdb_id || movie.id;
+      const key = titleKey(movie);
       const list = lists.find((l) => l.id === item.list);
       const isCustom = !!list && !isCoreListName(list.name);
       const current = map.get(key);
@@ -159,7 +160,9 @@ export default function Schedule({
   const events = useMemo(() => {
     const real = rawEvents.map(toEventRecord);
     if (!pending) return real;
-    return [...real, { id: 'pending', movie: pending.movie, start: pending.start, end: pending.end, notes: '', isWatched: false, isPending: true }];
+    const next = pending.movie?.nextUp;
+    const title = watchTitle(pending.movie, next?.season, next?.episode);
+    return [...real, { id: 'pending', movie: pending.movie, title, start: pending.start, end: pending.end, notes: '', isWatched: false, isPending: true }];
   }, [rawEvents, pending]);
   const savedEvents = useMemo(() => events.filter((e) => !e.isPending), [events]);
   const navCounts = useMemo(() => ({
@@ -215,12 +218,13 @@ export default function Schedule({
     setPending(null);
   };
 
-  const handleSave = async ({ movieId, startTime, endTime, notes }) => {
+  const handleSave = async ({ movieId, startTime, endTime, notes, seasonNumber = null, episodeNumber = null }) => {
     const isNew = !modal.editingEvent;
+    const fields = { movieId, startTime, endTime, notes, seasonNumber, episodeNumber };
     if (modal.editingEvent) {
-      await updateScheduledWatch(modal.editingEvent.id, { movieId, startTime, endTime, notes });
+      await updateScheduledWatch(modal.editingEvent.id, fields);
     } else {
-      await createScheduledWatch({ movieId, startTime, endTime, notes });
+      await createScheduledWatch(fields);
     }
     await refresh();
     if (isNew) setCalendarKey((k) => k + 1);
