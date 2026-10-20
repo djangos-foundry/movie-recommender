@@ -1453,3 +1453,9 @@
   padding: 2px 4px;
   font-size: 9px;
 }
+
+/* "S2E8–E10 · 2h 30m" under the Season / Episode / Episodes row of a binge block */
+.sc-hint--block {
+  margin-top: -6px;
+  color: var(--accent);
+}

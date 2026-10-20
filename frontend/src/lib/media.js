@@ -86,9 +86,28 @@ export function watchedInSeason(seasonInfo, item) {
   return 0;
 }
 
-/** Display title for a scheduled watch: "Severance · S2E6" for an episode. */
-export function watchTitle(movie, season, episode) {
+/** Last episode of a run of `count` episodes starting at (season, episode). */
+export function blockEnd(movie, season, episode, count = 1) {
+  let end = { season, episode };
+  for (let i = 1; i < count; i += 1) {
+    const next = nextEpisode(movie, end.season, end.episode);
+    if (!next) break;
+    end = next;
+  }
+  return end;
+}
+
+/** "S2E8", "S2E8–E10" for a run in one season, "S2E9–S3E1" across seasons. */
+export function episodeLabel(movie, season, episode, count = 1) {
+  const start = episodeCode(season, episode);
+  const end = blockEnd(movie, season, episode, count);
+  if (end.season === season && end.episode === episode) return start;
+  return end.season === season ? `${start}–E${end.episode}` : `${start}–${episodeCode(end.season, end.episode)}`;
+}
+
+/** Display title for a scheduled watch: "Severance · S2E6", or "Severance · S2E6–E8" for a binge. */
+export function watchTitle(movie, season, episode, count = 1) {
   const title = movie?.title || '';
   if (season == null || episode == null) return title;
-  return `${title} · ${episodeCode(season, episode)}`;
+  return `${title} · ${episodeLabel(movie, season, episode, count)}`;
 }

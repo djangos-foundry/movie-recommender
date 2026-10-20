@@ -1,6 +1,7 @@
 import React from 'react';
 import { Film, Globe, Bookmark, Plus, Check, Loader2 } from 'lucide-react';
 import { STATUS_LABELS, movieYear } from '../../lib/discoverEngine';
+import { isTv, seasonsLabel } from '../../lib/media';
 
 export default function DiscoverCard({
   movie,
@@ -16,7 +17,7 @@ export default function DiscoverCard({
   const year = movieYear(movie);
   const genre = (movie.genres || [])[0];
   const rating = movie.vote_average && Number(movie.vote_average) > 0 ? Number(movie.vote_average).toFixed(1) : null;
-  const meta = [year, genre, rating].filter(Boolean).join(' · ');
+  const meta = [year, isTv(movie) ? seasonsLabel(movie) : '', genre, rating].filter(Boolean).join(' · ');
 
   const canOpen = typeof onOpen === 'function';
 
@@ -67,7 +68,10 @@ export default function DiscoverCard({
         disabled={!canOpen}
         onClick={onOpen}
       >
-        <span className="dz-card__title">{movie.title}</span>
+        <span className="dz-card__title">
+          {movie.title}
+          {isTv(movie) && <span className="tv-tag dz-card__tv">TV</span>}
+        </span>
         <span className="dz-card__meta">{meta}</span>
       </button>
 

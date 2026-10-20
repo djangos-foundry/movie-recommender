@@ -1,5 +1,8 @@
 import logging
+from statistics import median
+
 import requests
+from django.core.cache import cache
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from django.conf import settings
@@ -1023,10 +1026,17 @@ class TMDBService:
             "profile_path": format_poster_url(p.get("profile_path")),
         } for p in creators]
 
-        # episode_run_time is often empty for newer shows
+        # episode_run_time is often empty for newer shows. The typical length of the
+        # latest season's episodes comes next (the last episode alone is often a
+        # long finale), then that last episode, then a default.
         last_episode = _episode_ref(data.get("last_episode_to_air"))
         run_times = data.get("episode_run_time") or []
-        runtime = (run_times[0] if run_times else None) or (last_episode or {}).get("runtime") or DEFAULT_EPISODE_RUNTIME
+        runtime = run_times[0] if run_times else None
+        if not runtime and last_episode and last_episode.get("season_number"):
+            season = self.get_tv_season(tmdb_id_int, last_episode["season_number"]) or {}
+            lengths = [e["runtime"] for e in season.get("episodes", []) if e.get("runtime")]
+            runtime = round(median(lengths)) if lengths else None
+        runtime = runtime or (last_episode or {}).get("runtime") or DEFAULT_EPISODE_RUNTIME
 
         seasons = [{
             "season_number": s.get("season_number"),
@@ -1072,6 +1082,48 @@ class TMDBService:
             "next_episode_to_air": _episode_ref(data.get("next_episode_to_air")),
             "raw_data": data,
         }
+
+    def get_tv_season(self, tmdb_id, season_number):
+        """One season's episodes (/tv/{id}/season/{n}), cached for six hours.
+        Returns {"season_number", "name", "episodes": [...]} or None."""
+        try:
+            tmdb_id_int, season_int = int(tmdb_id), int(season_number)
+        except (ValueError, TypeError):
+            return None
+        if not self.api_key:
+            return None
+        cache_key = f"tmdb:tv:{tmdb_id_int}:season:{season_int}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+        try:
+            response = _http.get(
+                f"{self.BASE_URL}/tv/{tmdb_id_int}/season/{season_int}",
+                params={"api_key": self.api_key},
+                timeout=5,
+            )
+        except Exception as e:
+            logger.warning("TMDB tv season request failed (%s).", e)
+            return None
+        if response.status_code != 200:
+            logger.warning("TMDB tv season returned %s.", response.status_code)
+            return None
+
+        data = response.json()
+        season = {
+            "season_number": data.get("season_number", season_int),
+            "name": data.get("name", ""),
+            "episodes": [{
+                "episode_number": e.get("episode_number"),
+                "name": e.get("name", ""),
+                "air_date": e.get("air_date") or "",
+                "runtime": e.get("runtime"),
+                "overview": e.get("overview", ""),
+                "still_path": format_poster_url(e.get("still_path")),
+            } for e in data.get("episodes") or []],
+        }
+        cache.set(cache_key, season, 6 * 60 * 60)
+        return season
 
     def get_details(self, tmdb_id, media_type="movie"):
         """Movie or TV show details, by media_type."""

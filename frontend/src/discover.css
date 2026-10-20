@@ -453,8 +453,15 @@
   color: var(--dz-mute);
 }
 
-/* Fixed column counts: 6 across with the filters panel open, 8 with it closed.
-   Cards scale with the window. Change the two numbers below to taste. */
+/* 6 across with the filters panel open, 8 with it closed, as long as each card still
+   gets about 160px. When the grid itself is narrower (a browser side panel open, a
+   small window) it drops a column at a time instead of shrinking the cards. The
+   breakpoints are n x 160px cards + (n - 1) x 18px gaps, measured on the grid's own
+   width (a container query), not the window's. */
+.dz-grid-wrap {
+  container: dz-grid / inline-size;
+}
+
 .dz-grid {
   display: grid;
   gap: 18px;
@@ -468,15 +475,32 @@
   grid-template-columns: repeat(8, minmax(0, 1fr));
 }
 
-/* On small windows, fall back to fewer columns so cards stay readable */
-@media (max-width: 1100px) {
-  .dz-grid--filters-open {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
+@container dz-grid (max-width: 1405px) {
+  .dz-grid--filters-closed { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+}
 
-  .dz-grid--filters-closed {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
+@container dz-grid (max-width: 1227px) {
+  .dz-grid--filters-closed { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+
+@container dz-grid (max-width: 1049px) {
+  .dz-grid--filters-open,
+  .dz-grid--filters-closed { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+
+@container dz-grid (max-width: 871px) {
+  .dz-grid--filters-open,
+  .dz-grid--filters-closed { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@container dz-grid (max-width: 693px) {
+  .dz-grid--filters-open,
+  .dz-grid--filters-closed { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@container dz-grid (max-width: 515px) {
+  .dz-grid--filters-open,
+  .dz-grid--filters-closed { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* ── Movie card ───────────────────────────────────────────────────────── */
@@ -1054,4 +1078,10 @@ input.dz-step__input {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+/* "TV" tag after a show's title on a Discover card */
+.dz-card__tv {
+  margin-left: 6px;
+  vertical-align: 2px;
 }

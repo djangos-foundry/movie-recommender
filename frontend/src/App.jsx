@@ -7,7 +7,7 @@ import Discover from './components/Discover';
 import Schedule from './components/Schedule';
 import NewListModal from './components/NewListModal';
 import AuthModal from './components/AuthModal';
-import TrashModal from './components/TrashModal';
+import TrashPage from './components/TrashPage';
 import ActivityRail from './components/ActivityRail';
 import SettingsModal from './components/SettingsModal';
 import MobileTabBar from './components/MobileTabBar';
@@ -26,6 +26,7 @@ import {
   getLibraryMovies,
   addMovieToList,
   updateListItem,
+  setItemLists,
   removeListItem,
   getTMDBMovie,
   getMe,
@@ -98,7 +99,6 @@ export default function App() {
   // Modals
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isNewListOpen, setIsNewListOpen] = useState(false);
-  const [isTrashOpen, setIsTrashOpen] = useState(false);
 
   // Loading & Network state
   const [isLoadingLists, setIsLoadingLists] = useState(true);
@@ -513,10 +513,11 @@ export default function App() {
 
 
   // 6. Add Movie to List Handler
-  const handleAddMovie = async (listId, movieData, { openDetail = true } = {}) => {
+  const handleAddMovie = async (listId, movieData, { openDetail = true, status } = {}) => {
     let initialStatus = 'plan_to_watch';
     if (activeListId === 'watching') initialStatus = 'watching';
     if (activeListId === 'completed') initialStatus = 'completed';
+    if (status) initialStatus = status;
 
     const newItem = await addMovieToList(listId, movieData, initialStatus);
     showToast(`Added "${movieData.title}"!`, 'success');
@@ -554,6 +555,26 @@ export default function App() {
       showToast('Failed to update movie', 'error');
     }
   };
+
+  // Tick boxes on a movie's page: which custom lists it is in
+  const handleSetLists = async (itemId, listIds) => {
+    try {
+      const { item } = await setItemLists(itemId, listIds);
+      await Promise.all([fetchAllMovies(), fetchLists()]);
+      if (item) setSelectedItem(item);
+    } catch (err) {
+      console.error('Failed to change lists:', err);
+      showToast(err.message || 'Failed to change lists', 'error');
+    }
+  };
+
+  // Custom lists the open movie is in, across all of its entries
+  const selectedListIds = useMemo(() => {
+    if (!selectedItem?.movie) return [];
+    const key = titleKey(selectedItem.movie);
+    const customIds = new Set(lists.map((l) => l.id));
+    return allMovies.filter((it) => titleKey(it.movie) === key && customIds.has(it.list)).map((it) => it.list);
+  }, [allMovies, lists, selectedItem]);
 
   // 8. Remove List Item Handler
   // Removing soft-deletes into Trash (30 days), so it happens straight away with an Undo
@@ -606,6 +627,12 @@ export default function App() {
     setMobilePanel(null);
   }, []);
 
+  // Trash is a page inside Library
+  const openTrash = useCallback(() => {
+    selectSection('library');
+    setViewMode('trash');
+  }, [selectSection]);
+
   // More only exists as a phone tab; widening the window lands back on Library
   useEffect(() => {
     setMobilePanel(null);
@@ -643,7 +670,7 @@ export default function App() {
 
       // Shortcuts with Ctrl or Alt stay live while typing in a field (for example the
       // movie-count box in Discover); single-key ones like N only fire when you're not typing.
-      const isDialogOpen = isSearchOpen || isNewListOpen || !!listEdit || isTrashOpen || isAuthOpen;
+      const isDialogOpen = isSearchOpen || isNewListOpen || !!listEdit || isAuthOpen;
       const fires = (shortcut) => matchesShortcut(e, shortcut)
         && !(isBareKey(shortcut) && (isTypingTarget(document.activeElement) || isDialogOpen));
 
@@ -727,7 +754,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcuts, isSettingsOpen, isSearchOpen, isNewListOpen, listEdit, isTrashOpen, isAuthOpen, viewMode, activeSection, selectSection]);
+  }, [shortcuts, isSettingsOpen, isSearchOpen, isNewListOpen, listEdit, isAuthOpen, viewMode, activeSection, selectSection]);
 
   // Set of movie IDs in the active list (for search modal to show 'Added')
   const existingMovieIds = useMemo(() => {
@@ -768,6 +795,31 @@ export default function App() {
     setPreviewMovie(null);
   };
 
+  // The phone/browser Back button closes an open page (movie, preview, Trash) and returns
+  // to the section it was opened from, instead of leaving the app: opening a page adds one
+  // history entry, Back pops it, and closing the page from inside the app drops it too.
+  const pageInHistory = React.useRef(false);
+  useEffect(() => {
+    if (viewMode !== 'list' && !pageInHistory.current) {
+      window.history.pushState({ cinetrackPage: true }, '');
+      pageInHistory.current = true;
+    } else if (viewMode === 'list' && pageInHistory.current) {
+      pageInHistory.current = false;
+      window.history.back();
+    }
+  }, [viewMode]);
+  useEffect(() => {
+    const onPopState = () => {
+      if (!pageInHistory.current) return;
+      pageInHistory.current = false;
+      setViewMode('list');
+      setSelectedItem(null);
+      setPreviewMovie(null);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
   let detailPage = null;
   if (viewMode === 'movie-detail' && selectedItem) {
     detailPage = (
@@ -775,6 +827,9 @@ export default function App() {
         item={selectedItem}
         lists={lists}
         onBack={closeDetail}
+        backLabel={activeSection === 'discover' ? 'Back to Discover' : 'Back to Movies'}
+        memberListIds={selectedListIds}
+        onSetLists={handleSetLists}
         onUpdateItem={handleUpdateItem}
         onRemoveItem={handleRemoveItem}
       />
@@ -785,7 +840,7 @@ export default function App() {
         item={{ id: null, movie: previewMovie }}
         isPreview
         lists={lists}
-        onAdd={(listId) => handleAddMovie(listId, previewMovie)}
+        onAdd={(listId) => handleAddMovie(listId, previewMovie, { status: 'plan_to_watch' })}
         onBack={closeDetail}
       />
     );
@@ -803,7 +858,7 @@ export default function App() {
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={handleToggleSidebar}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenTrash={() => setIsTrashOpen(true)}
+        onOpenTrash={openTrash}
         shortcuts={shortcuts}
         totalMoviesCount={totalAllCount}
         user={authUser}
@@ -844,7 +899,13 @@ export default function App() {
             statusCounts={statusCounts}
           />
 
-          {detailPage || (
+          {detailPage || (viewMode === 'trash' ? (
+            <TrashPage
+              onChanged={() => { fetchLists(); fetchAllMovies(); }}
+              onToggleLeftPanel={toggleLeftPanel}
+              isLeftPanelOpen={isLeftPanelOpen}
+            />
+          ) : (
             <MovieList
               currentList={currentListObj}
               items={displayedMovies}
@@ -859,7 +920,7 @@ export default function App() {
               isLeftPanelOpen={isLeftPanelOpen}
               searchInputRef={librarySearchRef}
             />
-          )}
+          ))}
         </>
       )}
 
@@ -901,8 +962,9 @@ export default function App() {
           mobilePanel={mobilePanel}
           onSetMobilePanel={setMobilePanel}
           shortcuts={shortcuts}
-          isOtherDialogOpen={isSettingsOpen || isSearchOpen || isNewListOpen || !!listEdit || isTrashOpen || isAuthOpen}
+          isOtherDialogOpen={isSettingsOpen || isSearchOpen || isNewListOpen || !!listEdit || isAuthOpen}
           prefs={prefs}
+          onLibraryChanged={fetchAllMovies}
         />
       )}
 
@@ -916,7 +978,7 @@ export default function App() {
           onOpenAuth={() => setIsAuthOpen(true)}
           onSignOut={handleSignOut}
           onOpenSettings={() => setIsSettingsOpen(true)}
-          onOpenTrash={() => setIsTrashOpen(true)}
+          onOpenTrash={openTrash}
           calendar={calendar}
           isCalendarBusy={isCalendarBusy}
           onConnectCalendar={handleConnectCalendar}
@@ -970,13 +1032,6 @@ export default function App() {
         focus={listEdit?.focus}
         onClose={() => setListEdit(null)}
         onSave={handleUpdateList}
-      />
-
-      {/* Trash */}
-      <TrashModal
-        isOpen={isTrashOpen}
-        onClose={() => setIsTrashOpen(false)}
-        onChanged={fetchLists}
       />
 
       {/* Toast */}

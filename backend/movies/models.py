@@ -119,6 +119,8 @@ class ScheduledWatch(models.Model):
     # Which episode, when the title is a TV show
     season_number = models.PositiveSmallIntegerField(null=True, blank=True)
     episode_number = models.PositiveSmallIntegerField(null=True, blank=True)
+    # A binge block: this many episodes in a row, starting at season/episode
+    episode_count = models.PositiveSmallIntegerField(default=1)
     is_watched = models.BooleanField(default=False)
     google_event_id = models.CharField(max_length=255, blank=True, default='')
     sync_status = models.CharField(max_length=12, choices=SYNC_CHOICES, default='not_synced')

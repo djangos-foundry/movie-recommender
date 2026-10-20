@@ -74,6 +74,7 @@ export default function Schedule({
   shortcuts = DEFAULT_SHORTCUTS,
   isOtherDialogOpen = false,
   prefs = {},
+  onLibraryChanged, // ticking a show's episode moves its progress, so Library refetches
 }) {
   const keyFor = (action) => shortcuts[action] || DEFAULT_SHORTCUTS[action];
   const [desktopView, setDesktopView] = useState(() => loadJson(STORE_KEY, {}).viewMode || 'week');
@@ -218,9 +219,9 @@ export default function Schedule({
     setPending(null);
   };
 
-  const handleSave = async ({ movieId, startTime, endTime, notes, seasonNumber = null, episodeNumber = null }) => {
+  const handleSave = async ({ movieId, startTime, endTime, notes, seasonNumber = null, episodeNumber = null, episodeCount = 1 }) => {
     const isNew = !modal.editingEvent;
-    const fields = { movieId, startTime, endTime, notes, seasonNumber, episodeNumber };
+    const fields = { movieId, startTime, endTime, notes, seasonNumber, episodeNumber, episodeCount };
     if (modal.editingEvent) {
       await updateScheduledWatch(modal.editingEvent.id, fields);
     } else {
@@ -238,6 +239,7 @@ export default function Schedule({
   const handleToggleWatched = async (record) => {
     await updateScheduledWatch(record.id, { isWatched: !record.isWatched });
     await refresh();
+    if (!record.isWatched && record.season != null) onLibraryChanged?.();
   };
 
   const handleReschedule = async (id, start, end) => {

@@ -141,6 +141,14 @@ export async function updateListItem(itemId, { status, user_rating, user_notes, 
   });
 }
 
+// Set which custom lists a movie is in; [] means Library only. Returns { item, items }.
+export async function setItemLists(itemId, listIds) {
+  return await fetchJson(`/list-items/${itemId}/lists/`, {
+    method: 'PUT',
+    body: JSON.stringify({ list_ids: listIds }),
+  });
+}
+
 export async function removeListItem(itemId) {
   return await fetchJson(`/list-items/${itemId}/`, {
     method: 'DELETE',
@@ -157,6 +165,11 @@ export async function searchTMDB(query, page = 1, { includeTv = false } = {}) {
 
 export async function getTMDBMovie(tmdbId, mediaType = 'movie') {
   return await fetchJson(`/tmdb/${mediaType === 'tv' ? 'tv' : 'movie'}/${tmdbId}/`);
+}
+
+// A TV season's episodes (fetched when a season is opened on a show's page)
+export async function getTvSeason(tmdbId, seasonNumber) {
+  return await fetchJson(`/tmdb/tv/${tmdbId}/season/${seasonNumber}/`);
 }
 
 // 5. Recommendations (random sampling without replacement over your library's genres)
@@ -207,7 +220,7 @@ export async function getScheduledWatches({ start, end } = {}) {
   return await fetchJson(`/schedule/${qs ? `?${qs}` : ''}`);
 }
 
-export async function createScheduledWatch({ movieId, startTime, endTime, notes = '', seasonNumber = null, episodeNumber = null }) {
+export async function createScheduledWatch({ movieId, startTime, endTime, notes = '', seasonNumber = null, episodeNumber = null, episodeCount = 1 }) {
   return await fetchJson('/schedule/', {
     method: 'POST',
     body: JSON.stringify({
@@ -217,15 +230,17 @@ export async function createScheduledWatch({ movieId, startTime, endTime, notes 
       notes,
       season_number: seasonNumber,
       episode_number: episodeNumber,
+      episode_count: episodeCount,
     }),
   });
 }
 
-export async function updateScheduledWatch(id, { movieId, startTime, endTime, notes, isWatched, seasonNumber, episodeNumber } = {}) {
+export async function updateScheduledWatch(id, { movieId, startTime, endTime, notes, isWatched, seasonNumber, episodeNumber, episodeCount } = {}) {
   const payload = {};
   if (movieId !== undefined) payload.movie_id = movieId;
   if (seasonNumber !== undefined) payload.season_number = seasonNumber;
   if (episodeNumber !== undefined) payload.episode_number = episodeNumber;
+  if (episodeCount !== undefined) payload.episode_count = episodeCount;
   if (startTime !== undefined) payload.start_time = startTime;
   if (endTime !== undefined) payload.end_time = endTime;
   if (notes !== undefined) payload.notes = notes;
@@ -252,6 +267,11 @@ export async function restoreTrashEntry(kind, id) {
   return await fetchJson(`/trash/${kind}/${id}/restore/`, {
     method: 'POST',
   });
+}
+
+// Empty Trash: delete everything in it for good
+export async function emptyTrash() {
+  return await fetchJson('/trash/', { method: 'DELETE' });
 }
 
 export async function permanentlyDeleteTrashEntry(kind, id) {

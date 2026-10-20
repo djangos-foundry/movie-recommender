@@ -23,6 +23,7 @@ from .serializers import (
 from .services.tmdb import tmdb_service, format_poster_url, format_backdrop_url, normalize_genres
 from .services.recommender import get_recommendations, get_filter_options, get_web_recommendations
 from .services import gcal
+from .services.episodes import advance_progress
 from .services.chat import parse_open_vocabulary, _RANDOM_RE
 
 
@@ -312,6 +313,64 @@ class MovieListItemDetailView(RetrieveUpdateDestroyAPIView):
         return Response(serializer.data)
 
 
+class MovieListItemListsView(APIView):
+    """
+    PUT /api/list-items/<int:pk>/lists/ {"list_ids": [..]} - Set which custom lists
+        this item's movie is in. An empty list means Library only (the hidden
+        Library list). New list entries copy the status, rating, notes and TV
+        progress of this item; entries for lists that are unticked are deleted
+        outright, since the movie itself stays in the library.
+        Returns {"item": the entry to keep showing, "items": every entry}.
+    """
+
+    COPIED_FIELDS = ('status', 'user_rating', 'user_notes', 'current_season', 'current_episode')
+
+    def put(self, request, pk):
+        item = get_object_or_404(
+            owned(MovieListItem.objects.select_related('list', 'movie'), request, 'list__owner'), pk=pk,
+        )
+        raw_ids = request.data.get('list_ids')
+        if not isinstance(raw_ids, list):
+            return Response({"error": "list_ids must be a list."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            wanted_ids = {int(i) for i in raw_ids}
+        except (ValueError, TypeError):
+            return Response({"error": "list_ids must be numbers."}, status=status.HTTP_400_BAD_REQUEST)
+
+        custom = list(owned(MovieList.objects.filter(is_system=False, id__in=wanted_ids), request))
+        if len(custom) != len(wanted_ids):
+            return Response({"error": "Unknown list."}, status=status.HTTP_400_BAD_REQUEST)
+        targets = custom or [get_library_list(request.user)]
+        target_ids = {lst.id for lst in targets}
+
+        for lst in targets:
+            entry = MovieListItem.all_objects.filter(list=lst, movie=item.movie).first()
+            if entry and entry.deleted_at is None:
+                continue
+            copied = {f: getattr(item, f) for f in self.COPIED_FIELDS}
+            if entry:  # a trashed entry for this list comes back instead of a second row
+                for field, value in copied.items():
+                    setattr(entry, field, value)
+                entry.deleted_at = None
+                entry.save()
+            else:
+                MovieListItem.objects.create(list=lst, movie=item.movie, **copied)
+
+        entries = owned(MovieListItem.objects.select_related('list', 'movie'), request, 'list__owner').filter(
+            movie=item.movie, list__deleted_at__isnull=True,
+        )
+        for entry in entries:
+            if entry.list_id not in target_ids:
+                entry.delete()
+
+        remaining = list(entries.filter(list_id__in=target_ids))
+        keep = next((e for e in remaining if e.id == item.id), remaining[0])
+        return Response({
+            "item": MovieListItemSerializer(keep).data,
+            "items": MovieListItemSerializer(remaining, many=True).data,
+        })
+
+
 class ScheduledWatchListCreateView(ListCreateAPIView):
     """
     GET /api/schedule/?start=<iso>&end=<iso> - Watch sessions in range (both
@@ -347,7 +406,10 @@ class ScheduledWatchDetailView(RetrieveUpdateDestroyAPIView):
         return owned(ScheduledWatch.objects.select_related('movie').all(), self.request)
 
     def perform_update(self, serializer):
+        was_watched = serializer.instance.is_watched
         watch = serializer.save()
+        if watch.is_watched and not was_watched:
+            advance_progress(watch)  # a show's episode ticked off moves its progress on
         gcal.sync_watch(watch)
 
     def perform_destroy(self, instance):
@@ -403,6 +465,21 @@ class TMDBTvDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response(details)
+
+
+class TMDBTvSeasonView(APIView):
+    """
+    GET /api/tmdb/tv/<int:tmdb_id>/season/<int:season_number>/ - A season's episodes.
+    """
+
+    def get(self, request, tmdb_id, season_number):
+        season = tmdb_service.get_tv_season(tmdb_id, season_number)
+        if not season:
+            return Response(
+                {"error": f"Season {season_number} of show {tmdb_id} not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(season)
 
 
 def _parse_list_id(raw):
@@ -561,6 +638,16 @@ class TrashView(APIView):
         entries.sort(key=lambda e: e['deleted_at'], reverse=True)
 
         return Response({"count": len(entries), "results": entries})
+
+    def delete(self, request):
+        """DELETE /api/trash/ - Empty Trash: permanently delete every trashed list
+        (with its movies) and every individually removed movie."""
+        lists = owned(MovieList.all_objects.filter(deleted_at__isnull=False), request)
+        items = owned(MovieListItem.all_objects.filter(deleted_at__isnull=False), request, 'list__owner')
+        deleted = lists.count() + items.exclude(list__in=lists).count()
+        items.delete()
+        lists.delete()
+        return Response({"deleted": deleted})
 
 
 class TrashRestoreView(APIView):
