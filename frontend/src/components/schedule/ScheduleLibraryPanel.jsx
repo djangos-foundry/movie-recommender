@@ -101,7 +101,8 @@ export default function ScheduleLibraryPanel({ isOpen = true, movieOptions = [],
       </div>
 
       <div className="sc-library__footer">
-        <p className="sc-hint">Drag a movie onto a day to schedule it — the end time fills in from its runtime.</p>
+        <p className="sc-hint desktop-only">Drag a movie onto a day to schedule it — the end time fills in from its runtime.</p>
+        <p className="sc-hint mobile-only">Tap a movie to schedule it — the end time fills in from its runtime.</p>
       </div>
     </aside>
   );

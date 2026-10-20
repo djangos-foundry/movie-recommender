@@ -9,6 +9,9 @@ import { formatTime, toDateInputValue } from '../../lib/scheduleEngine';
 // Thin wrapper around FullCalendar for the Month and Week views. All chrome
 // (title, prev/next, Today, the Month/Week/Agenda switch, "Schedule a watch")
 // lives in Schedule.jsx's own topbar — headerToolbar is off here.
+// Day and 3-day are the phone views picked from the left drawer.
+const FC_VIEWS = { month: 'dayGridMonth', week: 'timeGridWeek', day: 'timeGridDay', '3day': 'timeGridThreeDay' };
+
 const CalendarView = forwardRef(function CalendarView(
   { view, events, onDateClick, onEventClick, onEventReceive, onEventDrop, onDatesSet },
   ref,
@@ -72,7 +75,8 @@ const CalendarView = forwardRef(function CalendarView(
       <FullCalendar
         ref={ref}
         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-        initialView={view === 'week' ? 'timeGridWeek' : 'dayGridMonth'}
+        initialView={FC_VIEWS[view] || 'dayGridMonth'}
+        views={{ timeGridThreeDay: { type: 'timeGrid', duration: { days: 3 } } }}
         headerToolbar={false}
         height="100%"
         events={fcEvents}
@@ -87,7 +91,7 @@ const CalendarView = forwardRef(function CalendarView(
         slotDuration="01:00:00"
         scrollTime="07:00:00"
         slotLabelContent={(arg) => arg.date.toLocaleTimeString(undefined, { hour: 'numeric', hour12: true })}
-        dayHeaderContent={view === 'week' ? (arg) => (
+        dayHeaderContent={view !== 'month' ? (arg) => (
           <div className="sc-fc-daycol">
             <span className="sc-fc-daycol__day">{arg.date.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()}</span>
             <span className="sc-fc-daycol__num">{arg.date.getDate()}</span>
@@ -139,7 +143,7 @@ const CalendarView = forwardRef(function CalendarView(
         eventContent={(arg) => {
           const rec = arg.event.extendedProps.record;
           const movie = rec?.movie;
-          const isWeek = arg.view.type === 'timeGridWeek';
+          const isWeek = arg.view.type.startsWith('timeGrid');
           return (
             <div className="sc-fc-event__inner">
               {isWeek && (

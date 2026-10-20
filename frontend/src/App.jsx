@@ -10,6 +10,10 @@ import AuthModal from './components/AuthModal';
 import TrashModal from './components/TrashModal';
 import ActivityRail from './components/ActivityRail';
 import SettingsModal from './components/SettingsModal';
+import MobileTabBar from './components/MobileTabBar';
+import MobileMore from './components/MobileMore';
+import useIsMobile from './lib/useIsMobile';
+import './mobile.css';
 import { DEFAULT_SHORTCUTS, matchesShortcut } from './lib/shortcuts';
 import { loadPrefs, savePrefs, applyAccent } from './lib/prefs';
 import {
@@ -90,6 +94,14 @@ export default function App() {
   const handleToggleSidebar = () => {
     setIsSidebarOpen((prev) => !prev);
   };
+
+  // Phone width: side panels become drawers over the content, one at a time ('left' | 'right' | null)
+  const isMobile = useIsMobile();
+  const [mobilePanel, setMobilePanel] = useState(null);
+  const toggleMobilePanel = useCallback((side) => setMobilePanel((prev) => (prev === side ? null : side)), []);
+  const closeMobilePanel = useCallback(() => setMobilePanel(null), []);
+  const isLeftPanelOpen = isMobile ? mobilePanel === 'left' : isSidebarOpen;
+  const toggleLeftPanel = isMobile ? () => toggleMobilePanel('left') : handleToggleSidebar;
 
   const handleSaveShortcuts = (newShortcuts) => {
     setShortcuts(newShortcuts);
@@ -538,7 +550,14 @@ export default function App() {
     setViewMode('list');
     setSelectedItem(null);
     setPreviewMovie(null);
+    setMobilePanel(null);
   }, []);
+
+  // More only exists as a phone tab; widening the window lands back on Library
+  useEffect(() => {
+    setMobilePanel(null);
+    if (!isMobile && activeSection === 'more') selectSection('library');
+  }, [isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -698,8 +717,11 @@ export default function App() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--bg-void)' }}>
-      {/* Activity Rail */}
+    <div className={`app-shell ${isMobile ? 'app-shell--mobile' : ''}`}>
+      {/* Activity Rail (a bottom tab bar on phones) */}
+      {isMobile ? (
+        <MobileTabBar activeSection={activeSection} onSelectSection={selectSection} />
+      ) : (
       <ActivityRail
         activeSection={activeSection}
         onSelectSection={selectSection}
@@ -719,19 +741,26 @@ export default function App() {
         onConnectCalendar={handleConnectCalendar}
         onDisconnectCalendar={handleDisconnectCalendar}
       />
+      )}
+
+      {/* Tapping outside an open drawer closes it */}
+      {isMobile && mobilePanel && (
+        <div className="m-scrim" onClick={closeMobilePanel} aria-hidden="true" />
+      )}
 
       {/* Library section */}
       {activeSection === 'library' && (
         <>
           <Sidebar
-            isOpen={isSidebarOpen}
+            isOpen={isLeftPanelOpen}
             lists={lists}
             activeListId={activeListId}
             onSelectList={(id) => {
               setActiveListId(id);
               setViewMode('list');
+              closeMobilePanel();
             }}
-            onOpenNewList={() => setIsNewListOpen(true)}
+            onOpenNewList={() => { closeMobilePanel(); setIsNewListOpen(true); }}
             onReorderCustomLists={handleReorderCustomLists}
             onDeleteList={handleDeleteList}
             onToggleFavourite={handleToggleFavourite}
@@ -750,6 +779,8 @@ export default function App() {
               cardSize={prefs.cardSize}
               shortcuts={shortcuts}
               onRemoveItem={handleRemoveItem}
+              onToggleLeftPanel={toggleLeftPanel}
+              isLeftPanelOpen={isLeftPanelOpen}
             />
           )}
         </>
@@ -766,9 +797,13 @@ export default function App() {
         libraryIds={allLibraryMovieIds}
         prefs={prefs}
         onPrefsChange={handlePrefsChange}
-        isSidebarOpen={isSidebarOpen}
-        isFiltersOpen={prefs.filtersOpen}
-        onSetFiltersOpen={(open) => handlePrefsChange({ filtersOpen: open })}
+        isSidebarOpen={isLeftPanelOpen}
+        onToggleLeftPanel={toggleLeftPanel}
+        onCloseMobilePanel={closeMobilePanel}
+        isFiltersOpen={isMobile ? mobilePanel === 'right' : prefs.filtersOpen}
+        onSetFiltersOpen={(open) => (isMobile
+          ? setMobilePanel(open ? 'right' : null)
+          : handlePrefsChange({ filtersOpen: open }))}
         onOpenItem={openItemDetail}
         onAddMovie={handleAddMovie}
         onPreviewWeb={openWebPreview}
@@ -783,8 +818,30 @@ export default function App() {
           visible
           items={allMovies}
           lists={lists}
-          isSidebarOpen={isSidebarOpen}
+          isSidebarOpen={isLeftPanelOpen}
+          onToggleLeftPanel={toggleLeftPanel}
+          isMobile={isMobile}
+          mobilePanel={mobilePanel}
+          onSetMobilePanel={setMobilePanel}
           prefs={prefs}
+        />
+      )}
+
+      {/* More: phone-only tab for settings, trash and account */}
+      {activeSection === 'more' && (
+        <MobileMore
+          user={authUser}
+          totalMoviesCount={totalAllCount}
+          googleClientId={googleClientId}
+          onGoogleCredential={handleGoogleCredential}
+          onOpenAuth={() => setIsAuthOpen(true)}
+          onSignOut={handleSignOut}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenTrash={() => setIsTrashOpen(true)}
+          calendar={calendar}
+          isCalendarBusy={isCalendarBusy}
+          onConnectCalendar={handleConnectCalendar}
+          onDisconnectCalendar={handleDisconnectCalendar}
         />
       )}
 

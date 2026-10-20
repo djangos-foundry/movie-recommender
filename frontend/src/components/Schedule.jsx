@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Loader2, PanelRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Loader2, PanelRight, PanelLeft } from 'lucide-react';
 import '../schedule.css';
 import ScheduleSidebar from './schedule/ScheduleSidebar';
 import ScheduleLibraryPanel from './schedule/ScheduleLibraryPanel';
@@ -34,6 +34,15 @@ const VIEWS = [
   { id: 'agenda', label: 'Agenda', hotkey: 'A' },
 ];
 const VIEW_KEYS = { w: 'week', m: 'month', a: 'agenda' };
+// Phones pick a view from the left drawer (like Google Calendar) and default to a 3-day spread
+const MOBILE_VIEWS = [
+  { id: 'agenda', label: 'Schedule' },
+  { id: 'day', label: 'Day' },
+  { id: '3day', label: '3 days' },
+  { id: 'week', label: 'Week' },
+  { id: 'month', label: 'Month' },
+];
+const TIME_GRID_VIEWS = ['day', '3day', 'week'];
 
 const HEADER_COPY = {
   upcoming: { strong: 'Upcoming', sub: "Scheduled watches you haven't seen yet" },
@@ -54,8 +63,21 @@ function withDefaultTime(date) {
   return date;
 }
 
-export default function Schedule({ visible = true, items = [], lists = [], isSidebarOpen = true, prefs = {} }) {
-  const [viewMode, setViewMode] = useState(() => loadJson(STORE_KEY, {}).viewMode || 'week');
+export default function Schedule({
+  visible = true,
+  items = [],
+  lists = [],
+  isSidebarOpen = true,
+  onToggleLeftPanel,
+  isMobile = false,
+  mobilePanel = null,
+  onSetMobilePanel,
+  prefs = {},
+}) {
+  const [desktopView, setDesktopView] = useState(() => loadJson(STORE_KEY, {}).viewMode || 'week');
+  const [mobileView, setMobileView] = useState(() => loadJson(STORE_KEY, {}).mobileViewMode || '3day');
+  const viewMode = isMobile ? mobileView : desktopView;
+  const setViewMode = isMobile ? setMobileView : setDesktopView;
   const [navMode, setNavMode] = useState(() => loadJson(STORE_KEY, {}).navMode || 'calendar');
 
   const [rawEvents, setRawEvents] = useState([]);
@@ -63,8 +85,16 @@ export default function Schedule({ visible = true, items = [], lists = [], isSid
   const [error, setError] = useState('');
   const [dateRange, setDateRange] = useState({ start: null, end: null });
   const [selectedListId, setSelectedListId] = useState(null);
-  const [isLibraryOpen, setIsLibraryOpen] = useState(() => loadJson(STORE_KEY, {}).isLibraryOpen ?? true);
-  useEffect(() => { saveJson(STORE_KEY, { viewMode, navMode, isLibraryOpen }); }, [viewMode, navMode, isLibraryOpen]);
+  const [isDesktopLibraryOpen, setIsDesktopLibraryOpen] = useState(() => loadJson(STORE_KEY, {}).isLibraryOpen ?? true);
+  useEffect(() => {
+    saveJson(STORE_KEY, { viewMode: desktopView, mobileViewMode: mobileView, navMode, isLibraryOpen: isDesktopLibraryOpen });
+  }, [desktopView, mobileView, navMode, isDesktopLibraryOpen]);
+  // On phones the library panel is the right-hand drawer, which App owns
+  const isLibraryOpen = isMobile ? mobilePanel === 'right' : isDesktopLibraryOpen;
+  const setIsLibraryOpen = isMobile
+    ? (next) => onSetMobilePanel?.((typeof next === 'function' ? next(isLibraryOpen) : next) ? 'right' : null)
+    : setIsDesktopLibraryOpen;
+  const closeDrawer = () => { if (isMobile) onSetMobilePanel?.(null); };
   const calendarRef = useRef(null);
   const agendaScrollRef = useRef(null);
   const handleSelectAgendaDate = (date) => {
@@ -137,7 +167,7 @@ export default function Schedule({ visible = true, items = [], lists = [], isSid
     watched: savedEvents.filter((e) => e.isWatched).length,
   }), [savedEvents]);
   const weekGlance = useMemo(
-    () => (navMode === 'calendar' && viewMode === 'week' ? summarizeRange(savedEvents, dateRange.start, dateRange.end) : null),
+    () => (navMode === 'calendar' && TIME_GRID_VIEWS.includes(viewMode) ? summarizeRange(savedEvents, dateRange.start, dateRange.end) : null),
     [savedEvents, dateRange, navMode, viewMode],
   );
 
@@ -175,7 +205,9 @@ export default function Schedule({ visible = true, items = [], lists = [], isSid
     const end = addMinutes(start, movie ? runtimeOf(movie) : 120);
     const side = [0, 1, 2].includes(start.getDay()) ? 'right' : 'left';
     setPending({ movie, start, end });
-    setModal({ isOpen: true, editingEvent: null, initialMovie: movie, initialDate: start, anchorPoint: point ? { ...point, side } : null });
+    // Phones have no room beside the day column, so the dialog opens centred
+    const anchorPoint = point && !isMobile ? { ...point, side } : null;
+    setModal({ isOpen: true, editingEvent: null, initialMovie: movie, initialDate: start, anchorPoint });
   };
   const closeModal = () => {
     setModal((m) => ({ ...m, isOpen: false }));
@@ -223,6 +255,23 @@ export default function Schedule({ visible = true, items = [], lists = [], isSid
   const goNext = () => calendarRef.current?.getApi().next();
   const goToday = () => calendarRef.current?.getApi().today();
 
+  // Phones page the visible days with a sideways swipe; mostly-vertical drags stay scrolls
+  const swipeStart = useRef(null);
+  const handleSwipeStart = (e) => {
+    const t = e.touches[0];
+    swipeStart.current = { x: t.clientX, y: t.clientY };
+  };
+  const handleSwipeEnd = (e) => {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    if (!start) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    if (dx < 0) goNext(); else goPrev();
+  };
+
   const isCalendarNav = navMode === 'calendar';
   const isAgendaView = isCalendarNav && viewMode === 'agenda';
   const isListNav = navMode === 'upcoming' || navMode === 'watched';
@@ -257,24 +306,40 @@ export default function Schedule({ visible = true, items = [], lists = [], isSid
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [visible, modal.isOpen, canPageDates]);
+  }, [visible, modal.isOpen, canPageDates, isMobile]);
 
   return (
     <div className="sc" style={{ display: visible ? 'contents' : 'none' }}>
       <ScheduleSidebar
         isOpen={isSidebarOpen}
         navMode={navMode}
-        onSelectNav={setNavMode}
+        onSelectNav={(id) => { setNavMode(id); closeDrawer(); }}
+        views={isMobile ? MOBILE_VIEWS : null}
+        viewMode={viewMode}
+        onSelectView={(id) => { setNavMode('calendar'); setViewMode(id); closeDrawer(); }}
         counts={navCounts}
         lists={customLists}
         selectedListId={selectedListId}
-        onSelectList={setSelectedListId}
+        onSelectList={(id) => {
+          setSelectedListId(id);
+          // On phones, picking a list shows its movies in the library drawer straight away
+          if (isMobile && id != null) onSetMobilePanel?.('right');
+        }}
         glance={weekGlance}
       />
 
       <main className="sc-main">
         <header className="sc-topbar">
           <div className="sc-topbar__left">
+            <button
+              type="button"
+              className={`m-panel-btn mobile-only ${isSidebarOpen ? 'is-on' : ''}`}
+              aria-label="Views and calendar"
+              aria-expanded={isSidebarOpen}
+              onClick={onToggleLeftPanel}
+            >
+              <PanelLeft size={18} />
+            </button>
             {isListNav ? (
               <div>
                 <div className="sc-topbar__strong">{HEADER_COPY[navMode].strong}</div>
@@ -299,8 +364,11 @@ export default function Schedule({ visible = true, items = [], lists = [], isSid
           </div>
 
           <div className="sc-topbar__right">
+            <button type="button" className="sc-btn sc-btn--primary desktop-only" onClick={() => openCreate()}>
+              <Plus size={15} />Schedule a watch
+            </button>
             {isCalendarNav && (
-              <div className="sc-segs" role="group" aria-label="View">
+              <div className="sc-segs desktop-only" role="group" aria-label="View">
                 {VIEWS.map((v) => (
                   <button
                     key={v.id}
@@ -317,18 +385,19 @@ export default function Schedule({ visible = true, items = [], lists = [], isSid
             )}
             <button
               type="button"
-              className={`sc-btn sc-btn--icon ${isLibraryOpen ? 'is-on' : ''}`}
+              className={`sc-btn sc-btn--icon sc-library-toggle ${isLibraryOpen ? 'is-on' : ''}`}
               aria-label={isLibraryOpen ? 'Hide library panel' : 'Show library panel'}
               title={`${isLibraryOpen ? 'Hide' : 'Show'} library panel (${TOGGLE_LIBRARY_SHORTCUT})`}
               onClick={() => setIsLibraryOpen((prev) => !prev)}
             >
               <PanelRight size={16} />
             </button>
-            <button type="button" className="sc-btn sc-btn--primary" onClick={() => openCreate()}>
-              <Plus size={15} />Schedule a watch
-            </button>
           </div>
         </header>
+
+        <button type="button" className="sc-fab mobile-only" aria-label="Schedule a watch" onClick={() => openCreate()}>
+          <Plus size={22} />
+        </button>
 
         {error && <p className="sc-notice sc-notice--error" style={{ margin: '12px 20px 0' }}>{error}</p>}
 
@@ -368,7 +437,11 @@ export default function Schedule({ visible = true, items = [], lists = [], isSid
               <AgendaCalendarPanel events={savedEvents} onSelectDate={handleSelectAgendaDate} />
             </div>
           ) : (
-            <div className="sc-calendar-wrap">
+            <div
+              className="sc-calendar-wrap"
+              onTouchStart={isMobile ? handleSwipeStart : undefined}
+              onTouchEnd={isMobile ? handleSwipeEnd : undefined}
+            >
               <CalendarView
                 key={`${viewMode}-${calendarKey}`}
                 ref={calendarRef}
@@ -390,7 +463,7 @@ export default function Schedule({ visible = true, items = [], lists = [], isSid
         movieOptions={libraryOptions}
         activeListName={activeListName}
         onClearList={() => setSelectedListId(null)}
-        onQuickSchedule={(movie) => openCreate(movie, null)}
+        onQuickSchedule={(movie) => { closeDrawer(); openCreate(movie, null); }}
       />
 
       <ScheduleModal
