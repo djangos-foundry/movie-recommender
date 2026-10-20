@@ -50,6 +50,9 @@ function RangeRow({ label, valueLabel, min, max, step = 1, value, onChange, fill
   );
 }
 
+// Unsearched, the people lists show only the names with the most movies; searching covers everyone
+const PEOPLE_SHOWN = 40;
+
 // Director / Actor / Language: a collapsed row that opens into a searchable chip list
 function CollapsibleChips({ label, options, selected, onToggle, format = (v) => v }) {
   const [open, setOpen] = useState(false);
@@ -57,7 +60,11 @@ function CollapsibleChips({ label, options, selected, onToggle, format = (v) => 
   if (!options.length) return null;
 
   const q = query.trim().toLowerCase();
-  const visible = q ? options.filter((o) => format(o.value).toLowerCase().includes(q)) : options;
+  // Selected names stay visible even when they're outside the top few
+  const top = options.slice(0, PEOPLE_SHOWN);
+  const pinned = options.slice(PEOPLE_SHOWN).filter((o) => selected.includes(o.value));
+  const visible = q ? options.filter((o) => format(o.value).toLowerCase().includes(q)) : [...top, ...pinned];
+  const hiddenCount = q ? 0 : options.length - visible.length;
   const Icon = open ? ChevronDown : ChevronRight;
 
   return (
@@ -89,6 +96,11 @@ function CollapsibleChips({ label, options, selected, onToggle, format = (v) => 
             ))}
             {visible.length === 0 && <span className="dz-mute">No matches</span>}
           </div>
+          {hiddenCount > 0 && (
+            <p className="dz-hint dz-collapse__more">
+              Showing the top {PEOPLE_SHOWN} of {options.length}. Search to find anyone.
+            </p>
+          )}
         </div>
       )}
     </div>

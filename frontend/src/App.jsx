@@ -39,6 +39,14 @@ import { requestCalendarCode, browserTimeZone } from './lib/googleCalendar';
 
 import { AlertCircle, RefreshCw, CheckCircle2, Trash2 } from 'lucide-react';
 
+// Library poster-size shortcuts → the cardSize preference
+const CARD_SIZE_SHORTCUTS = [
+  { action: 'cardSmall', id: 'small', label: 'Small' },
+  { action: 'cardMedium', id: 'medium', label: 'Medium' },
+  { action: 'cardLarge', id: 'large', label: 'Large' },
+  { action: 'cardExtraLarge', id: 'extra-large', label: 'Extra large' },
+];
+
 export default function App() {
   // Sidebar open/collapse state (default open)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -53,6 +61,8 @@ export default function App() {
     }
   });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  // The Library list's own search box, focused by the "Search this list" shortcut
+  const librarySearchRef = React.useRef(null);
 
   // Lists & active navigation state
   const [lists, setLists] = useState([]);
@@ -669,13 +679,6 @@ export default function App() {
         return;
       }
 
-      // Search TMDB and add a movie, from anywhere (default Ctrl+K)
-      if (fires(shortcuts.search)) {
-        e.preventDefault();
-        setIsSearchOpen(true);
-        return;
-      }
-
       // Section shortcuts: only while that section's main view is showing.
       // Calendar's own shortcuts live in Schedule.jsx.
       if (viewMode !== 'list') return;
@@ -685,6 +688,25 @@ export default function App() {
         e.preventDefault();
         setIsSearchOpen(true);
         return;
+      }
+
+      // Library: jump into the list's search bar (default /); Esc there leaves it again
+      if (activeSection === 'library' && fires(shortcuts.focusSearch)) {
+        e.preventDefault();
+        librarySearchRef.current?.focus();
+        librarySearchRef.current?.select();
+        return;
+      }
+
+      // Library: poster size (default Ctrl+Shift+S / M / L / X), same setting as Settings › Appearance
+      if (activeSection === 'library') {
+        const size = CARD_SIZE_SHORTCUTS.find(({ action }) => fires(shortcuts[action]));
+        if (size) {
+          e.preventDefault();
+          setPrefs((prev) => ({ ...prev, cardSize: size.id }));
+          showToast(`Poster size: ${size.label}`, 'success');
+          return;
+        }
       }
 
       // Discover: toggle the filters panel (default Ctrl+Alt+B)
@@ -826,6 +848,7 @@ export default function App() {
               onRemoveItem={handleRemoveItem}
               onToggleLeftPanel={toggleLeftPanel}
               isLeftPanelOpen={isLeftPanelOpen}
+              searchInputRef={librarySearchRef}
             />
           )}
         </>

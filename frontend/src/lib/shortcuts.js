@@ -8,9 +8,13 @@ export const DEFAULT_SHORTCUTS = {
   goDiscover: 'Ctrl+Shift+2',
   goSchedule: 'Ctrl+Shift+3',
   toggleSidebar: 'Alt+B',
-  search: 'Ctrl+K',
   // Library
   addMovie: 'N',
+  focusSearch: '/',
+  cardSmall: 'Ctrl+Shift+S',
+  cardMedium: 'Ctrl+Shift+M',
+  cardLarge: 'Ctrl+Shift+L',
+  cardExtraLarge: 'Ctrl+Shift+X',
   // Discover
   toggleFilters: 'Ctrl+Alt+B',
   // Calendar
@@ -34,7 +38,6 @@ export const SHORTCUT_GROUPS = [
       { key: 'toggleSidebar', label: 'Toggle left sidebar' },
       { key: 'settings', label: 'Open settings' },
       { key: 'toggleTrash', label: 'Open Trash' },
-      { key: 'search', label: 'Search and add a movie' },
     ],
   },
   {
@@ -51,6 +54,11 @@ export const SHORTCUT_GROUPS = [
     label: 'Library',
     rows: [
       { key: 'addMovie', label: 'Add a movie' },
+      { key: 'focusSearch', label: 'Search this list' },
+      { key: 'cardSmall', label: 'Small posters' },
+      { key: 'cardMedium', label: 'Medium posters' },
+      { key: 'cardLarge', label: 'Large posters' },
+      { key: 'cardExtraLarge', label: 'Extra large posters' },
     ],
   },
   {
@@ -125,9 +133,13 @@ export function matchesShortcut(e, shortcut) {
   const wantShift = parts.includes('Shift');
   const wantMeta = parts.includes('Cmd') || parts.includes('Meta');
 
+  // Punctuation like "/" needs Shift on some keyboard layouts, so an unshifted
+  // punctuation shortcut also matches when Shift happens to be held
+  const shiftAgnostic = !wantShift && target.length === 1 && !/[a-z0-9]/.test(target);
+
   if (wantCtrl !== e.ctrlKey) return false;
   if (wantAlt !== e.altKey) return false;
-  if (wantShift !== e.shiftKey) return false;
+  if (wantShift !== e.shiftKey && !shiftAgnostic) return false;
   if (wantMeta !== e.metaKey) return false;
 
   const key = e.key.toLowerCase();

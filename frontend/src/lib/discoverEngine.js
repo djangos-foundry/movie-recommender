@@ -39,7 +39,6 @@ const LANGUAGE_NAMES = {
 export const languageLabel = (code) => LANGUAGE_NAMES[code] || (code || '').toUpperCase();
 
 const MULTI_KEYS = ['statuses', 'genres', 'lists', 'directors', 'actors', 'languages'];
-const MAX_PEOPLE_OPTIONS = 40;
 
 /** Lowercase and drop everything but letters and digits: "Spider-Man" -> "spiderman". */
 export function normalizeTitle(s) {
@@ -169,8 +168,10 @@ export function getFilterOptions(records) {
     statuses: tally(statuses),
     genres: tally(genres),
     lists: [...listCounts.values()].sort((a, b) => b.count - a.count),
-    directors: tally(directors).slice(0, MAX_PEOPLE_OPTIONS),
-    actors: tally(actors).slice(0, MAX_PEOPLE_OPTIONS),
+    // Everyone in the library, most movies first. The filter panel shows only the top few
+    // until you search, so a one-movie actor is still findable (and Ask understands them).
+    directors: tally(directors),
+    actors: tally(actors),
     languages: tally(languages),
     years: { min: years.length ? Math.min(...years) : 0, max: years.length ? Math.max(...years) : 0 },
     runtime: { max: runtimes.length ? Math.max(...runtimes) : 0 },

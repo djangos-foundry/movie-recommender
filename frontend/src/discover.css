@@ -1013,6 +1013,11 @@ input.dz-step__input {
   padding: 4px 0 8px;
 }
 
+.dz-collapse__more {
+  padding: 0 2px;
+  font-size: 11px;
+}
+
 .dz-search {
   height: 32px;
   padding: 0 10px;
