@@ -120,7 +120,12 @@ export default function DiscoverFilters({
 
   const yearMin = filters.yearMin ?? years.min;
   const yearMax = filters.yearMax ?? years.max;
-  const runtimeMax = filters.runtimeMax ?? runtime.max;
+  // The runtime slider moves in 5-minute steps from 60, so its end is rounded up onto that
+  // grid; otherwise the browser snaps "Any length" to the step below and the knob stops short.
+  const RUNTIME_MIN = 60;
+  const RUNTIME_STEP = 5;
+  const runtimeSliderMax = RUNTIME_MIN + Math.max(1, Math.ceil((runtime.max - RUNTIME_MIN) / RUNTIME_STEP)) * RUNTIME_STEP;
+  const runtimeMax = filters.runtimeMax ?? runtimeSliderMax;
 
   return (
     <aside
@@ -238,9 +243,9 @@ export default function DiscoverFilters({
                 <RangeRow
                   label="Runtime"
                   valueLabel={filters.runtimeMax === null ? 'Any length' : `up to ${runtimeMax} min`}
-                  min={60}
-                  max={Math.max(runtime.max, 61)}
-                  step={5}
+                  min={RUNTIME_MIN}
+                  max={runtimeSliderMax}
+                  step={RUNTIME_STEP}
                   value={runtimeMax}
                   onChange={(v) => set({ runtimeMax: v >= runtime.max ? null : v })}
                 />

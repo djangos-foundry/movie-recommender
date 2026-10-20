@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Palette, Keyboard, Compass, Minus, Plus, CalendarDays } from 'lucide-react';
 import '../settings.css';
 import { ACCENTS } from '../lib/prefs';
-import { DEFAULT_SHORTCUTS, formatShortcut, shortcutFromEvent } from '../lib/shortcuts';
+import { DEFAULT_SHORTCUTS, SHORTCUT_GROUPS, findShortcutConflict, formatShortcut, shortcutFromEvent } from '../lib/shortcuts';
 import { clampCount } from '../lib/discoverEngine';
 
 // Re-exported so existing imports of DEFAULT_SHORTCUTS from this module keep working
@@ -10,21 +10,9 @@ export { DEFAULT_SHORTCUTS };
 
 const SECTIONS = [
   { id: 'appearance', label: 'Appearance', icon: Palette, subtitle: 'Make the app look the way you like.' },
-  { id: 'shortcuts', label: 'Keyboard shortcuts', icon: Keyboard, subtitle: 'Click Edit, then press the new keys.' },
+  { id: 'shortcuts', label: 'Keyboard shortcuts', icon: Keyboard, subtitle: 'Click Edit, then press the new keys. Section shortcuts only work while that section is open.' },
   { id: 'discover', label: 'Discover', icon: Compass, subtitle: 'Control how recommendations are drawn and shown.' },
   { id: 'calendar', label: 'Calendar', icon: CalendarDays, subtitle: 'Choose what shows on scheduled-watch cards.' },
-];
-
-const SHORTCUT_ROWS = [
-  { key: 'toggleSidebar', label: 'Toggle left sidebar' },
-  { key: 'toggleFilters', label: 'Toggle filters panel' },
-  { key: 'goLibrary', label: 'Go to Library' },
-  { key: 'goDiscover', label: 'Go to Discover' },
-  { key: 'goSchedule', label: 'Go to Calendar' },
-  { key: 'search', label: 'Search and add a movie' },
-  { key: 'addMovie', label: 'Add movie to list' },
-  { key: 'settings', label: 'Open settings' },
-  { key: 'toggleTrash', label: 'Open Trash' },
 ];
 
 const POSTER_SIZES = [
@@ -109,11 +97,9 @@ export default function SettingsModal({
       const combo = shortcutFromEvent(e);
       if (!combo) return;
 
-      const clash = SHORTCUT_ROWS.find(
-        (r) => r.key !== recording && (shortcuts[r.key] || DEFAULT_SHORTCUTS[r.key]) === combo,
-      );
+      const clash = findShortcutConflict(shortcuts, recording, combo);
       if (clash) {
-        setConflict(`${formatShortcut(combo)} is already used for "${clash.label}".`);
+        setConflict(`${formatShortcut(combo)} is already used for "${clash.label}" (${clash.group}).`);
         return;
       }
       onSaveShortcuts?.({ ...shortcuts, [recording]: combo });
@@ -212,27 +198,34 @@ export default function SettingsModal({
             )}
 
             {section === 'shortcuts' && (
-              <div className="st-rows">
-                {SHORTCUT_ROWS.map((row) => {
-                  const isRecording = recording === row.key;
-                  return (
-                    <Row key={row.key} title={row.label}>
-                      {isRecording ? (
-                        <span className="st-key st-key--recording">Press keys…</span>
-                      ) : (
-                        <span className="st-key">{formatShortcut(shortcuts[row.key] || DEFAULT_SHORTCUTS[row.key])}</span>
-                      )}
-                      <button
-                        type="button"
-                        className="st-btn"
-                        onClick={() => { setConflict(''); setRecording(isRecording ? null : row.key); }}
-                      >
-                        {isRecording ? 'Cancel' : 'Edit'}
-                      </button>
-                    </Row>
-                  );
-                })}
+              <div className="st-rows st-rows--grouped">
                 {conflict && <p className="st-warn" role="alert">{conflict}</p>}
+                {SHORTCUT_GROUPS.map((group) => (
+                  <section key={group.id} className="st-group" aria-label={group.label}>
+                    <h3 className="st-group__title">{group.label}</h3>
+                    <div className="st-group__card">
+                      {group.rows.map((row) => {
+                        const isRecording = recording === row.key;
+                        return (
+                          <Row key={row.key} title={row.label}>
+                            {isRecording ? (
+                              <span className="st-key st-key--recording">Press keys…</span>
+                            ) : (
+                              <span className="st-key">{formatShortcut(shortcuts[row.key] || DEFAULT_SHORTCUTS[row.key])}</span>
+                            )}
+                            <button
+                              type="button"
+                              className="st-btn"
+                              onClick={() => { setConflict(''); setRecording(isRecording ? null : row.key); }}
+                            >
+                              {isRecording ? 'Cancel' : 'Edit'}
+                            </button>
+                          </Row>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
                 <div className="st-actions">
                   <button type="button" className="st-btn" onClick={onResetShortcuts}>Reset to defaults</button>
                 </div>

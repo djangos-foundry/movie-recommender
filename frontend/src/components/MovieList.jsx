@@ -208,12 +208,10 @@ export default function MovieList({
                     <button
                       type="button"
                       className="movie-card__delete-btn"
-                      title={`Remove "${movie.title}"`}
+                      title={`Move "${movie.title}" to Trash`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (window.confirm(`Are you sure you want to remove "${movie.title}" from this list?`)) {
-                          onRemoveItem?.(item.id);
-                        }
+                        onRemoveItem?.(item.id);
                       }}
                       aria-label={`Remove ${movie.title}`}
                     >

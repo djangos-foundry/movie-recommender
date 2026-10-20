@@ -23,17 +23,15 @@ import {
   deleteScheduledWatch,
 } from '../api/client';
 import { loadJson, saveJson } from '../lib/prefs';
-import { matchesShortcut } from '../lib/shortcuts';
-
-const TOGGLE_LIBRARY_SHORTCUT = 'Ctrl+Alt+B';
+import { DEFAULT_SHORTCUTS, matchesShortcut, isBareKey, isTypingTarget } from '../lib/shortcuts';
 
 const STORE_KEY = 'cinetrack_schedule';
+// shortcutKey points into the user's editable shortcuts (Settings › Keyboard shortcuts)
 const VIEWS = [
-  { id: 'week', label: 'Week', hotkey: 'W' },
-  { id: 'month', label: 'Month', hotkey: 'M' },
-  { id: 'agenda', label: 'Agenda', hotkey: 'A' },
+  { id: 'week', label: 'Week', shortcutKey: 'calWeek' },
+  { id: 'month', label: 'Month', shortcutKey: 'calMonth' },
+  { id: 'agenda', label: 'Agenda', shortcutKey: 'calAgenda' },
 ];
-const VIEW_KEYS = { w: 'week', m: 'month', a: 'agenda' };
 // Phones pick a view from the left drawer (like Google Calendar) and default to a 3-day spread
 const MOBILE_VIEWS = [
   { id: 'agenda', label: 'Schedule' },
@@ -72,8 +70,11 @@ export default function Schedule({
   isMobile = false,
   mobilePanel = null,
   onSetMobilePanel,
+  shortcuts = DEFAULT_SHORTCUTS,
+  isOtherDialogOpen = false,
   prefs = {},
 }) {
+  const keyFor = (action) => shortcuts[action] || DEFAULT_SHORTCUTS[action];
   const [desktopView, setDesktopView] = useState(() => loadJson(STORE_KEY, {}).viewMode || 'week');
   const [mobileView, setMobileView] = useState(() => loadJson(STORE_KEY, {}).mobileViewMode || '3day');
   const viewMode = isMobile ? mobileView : desktopView;
@@ -277,36 +278,36 @@ export default function Schedule({
   const isListNav = navMode === 'upcoming' || navMode === 'watched';
   const canPageDates = isCalendarNav && !isAgendaView;
 
-  // View shortcuts: W/M/A jump straight to that calendar view, P/N page the
-  // visible range like Google Calendar — all ignored while typing in a field
-  // or while the schedule dialog is open.
+  // Calendar shortcuts (defaults: W/M/A jump to a view, P/N page the visible range like
+  // Google Calendar, Ctrl+Alt+B toggles the library panel). Single-key ones are ignored
+  // while typing in a field; none fire while a dialog is open.
   useEffect(() => {
     if (!visible) return undefined;
-    const isTypingTarget = (el) => !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
     const onKeyDown = (e) => {
-      if (modal.isOpen) return;
-      if (matchesShortcut(e, TOGGLE_LIBRARY_SHORTCUT)) {
+      if (modal.isOpen || isOtherDialogOpen) return;
+      const fires = (action) => {
+        const shortcut = keyFor(action);
+        return matchesShortcut(e, shortcut) && !(isBareKey(shortcut) && isTypingTarget(document.activeElement));
+      };
+      if (fires('toggleLibraryPanel')) {
         e.preventDefault();
         setIsLibraryOpen((prev) => !prev);
         return;
       }
-      if (e.ctrlKey || e.altKey || e.metaKey) return;
-      if (isTypingTarget(document.activeElement)) return;
-      const key = e.key.toLowerCase();
-      if ((key === 'p' || key === 'n') && canPageDates) {
+      if (canPageDates && (fires('calPrev') || fires('calNext'))) {
         e.preventDefault();
-        if (key === 'p') goPrev(); else goNext();
+        if (fires('calPrev')) goPrev(); else goNext();
         return;
       }
-      const next = VIEW_KEYS[key];
+      const next = VIEWS.find((v) => fires(v.shortcutKey));
       if (!next) return;
       e.preventDefault();
       setNavMode('calendar');
-      setViewMode(next);
+      setViewMode(next.id);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [visible, modal.isOpen, canPageDates, isMobile]);
+  }, [visible, modal.isOpen, isOtherDialogOpen, canPageDates, isMobile, shortcuts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="sc" style={{ display: visible ? 'contents' : 'none' }}>
@@ -352,10 +353,10 @@ export default function Schedule({
             ) : (
               <div className="sc-datenav">
                 <button type="button" className="sc-btn" onClick={goToday}>Today</button>
-                <button type="button" className="sc-btn sc-btn--icon sc-btn--round" aria-label="Previous" title="Previous (P)" onClick={goPrev}>
+                <button type="button" className="sc-btn sc-btn--icon sc-btn--round" aria-label="Previous" title={`Previous (${keyFor('calPrev')})`} onClick={goPrev}>
                   <ChevronLeft size={16} />
                 </button>
-                <button type="button" className="sc-btn sc-btn--icon sc-btn--round" aria-label="Next" title="Next (N)" onClick={goNext}>
+                <button type="button" className="sc-btn sc-btn--icon sc-btn--round" aria-label="Next" title={`Next (${keyFor('calNext')})`} onClick={goNext}>
                   <ChevronRight size={16} />
                 </button>
                 <span className="sc-topbar__title">{title}</span>
@@ -375,7 +376,7 @@ export default function Schedule({
                     type="button"
                     className={`sc-seg ${viewMode === v.id ? 'is-on' : ''}`}
                     aria-pressed={viewMode === v.id}
-                    title={`${v.label} (${v.hotkey})`}
+                    title={`${v.label} (${keyFor(v.shortcutKey)})`}
                     onClick={() => setViewMode(v.id)}
                   >
                     {v.label}
@@ -387,7 +388,7 @@ export default function Schedule({
               type="button"
               className={`sc-btn sc-btn--icon sc-library-toggle ${isLibraryOpen ? 'is-on' : ''}`}
               aria-label={isLibraryOpen ? 'Hide library panel' : 'Show library panel'}
-              title={`${isLibraryOpen ? 'Hide' : 'Show'} library panel (${TOGGLE_LIBRARY_SHORTCUT})`}
+              title={`${isLibraryOpen ? 'Hide' : 'Show'} library panel (${keyFor('toggleLibraryPanel')})`}
               onClick={() => setIsLibraryOpen((prev) => !prev)}
             >
               <PanelRight size={16} />

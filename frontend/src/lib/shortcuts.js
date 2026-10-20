@@ -1,16 +1,110 @@
 // Keyboard shortcut helpers. Shortcuts are stored as strings like "Ctrl+Shift+1".
 
 export const DEFAULT_SHORTCUTS = {
-  toggleSidebar: 'Alt+B',
-  toggleFilters: 'Ctrl+Alt+B',
+  // General: work everywhere
+  settings: 'Ctrl+,',
+  toggleTrash: 'Ctrl+Shift+Backspace',
   goLibrary: 'Ctrl+Shift+1',
   goDiscover: 'Ctrl+Shift+2',
   goSchedule: 'Ctrl+Shift+3',
+  toggleSidebar: 'Alt+B',
   search: 'Ctrl+K',
-  addMovie: 'Alt+N',
-  settings: 'Ctrl+,',
-  toggleTrash: 'Ctrl+Shift+Backspace',
+  // Library
+  addMovie: 'N',
+  // Discover
+  toggleFilters: 'Ctrl+Alt+B',
+  // Calendar
+  calWeek: 'W',
+  calMonth: 'M',
+  calAgenda: 'A',
+  calPrev: 'P',
+  calNext: 'N',
+  toggleLibraryPanel: 'Ctrl+Alt+B',
 };
+
+// How Settings groups the shortcuts. A section's shortcuts only fire while that section is
+// open, so two sections may share a key (Library and Calendar both use N); General and
+// Navigation shortcuts work everywhere and so must not collide with anything.
+const GLOBAL_GROUPS = ['general', 'navigation'];
+export const SHORTCUT_GROUPS = [
+  {
+    id: 'general',
+    label: 'General',
+    rows: [
+      { key: 'toggleSidebar', label: 'Toggle left sidebar' },
+      { key: 'settings', label: 'Open settings' },
+      { key: 'toggleTrash', label: 'Open Trash' },
+      { key: 'search', label: 'Search and add a movie' },
+    ],
+  },
+  {
+    id: 'navigation',
+    label: 'Navigation',
+    rows: [
+      { key: 'goLibrary', label: 'Go to Library' },
+      { key: 'goDiscover', label: 'Go to Discover' },
+      { key: 'goSchedule', label: 'Go to Calendar' },
+    ],
+  },
+  {
+    id: 'library',
+    label: 'Library',
+    rows: [
+      { key: 'addMovie', label: 'Add a movie' },
+    ],
+  },
+  {
+    id: 'discover',
+    label: 'Discover',
+    rows: [
+      { key: 'toggleFilters', label: 'Toggle filters panel' },
+    ],
+  },
+  {
+    id: 'calendar',
+    label: 'Calendar',
+    rows: [
+      { key: 'calWeek', label: 'Week view' },
+      { key: 'calMonth', label: 'Month view' },
+      { key: 'calAgenda', label: 'Agenda view' },
+      { key: 'calPrev', label: 'Previous week or month' },
+      { key: 'calNext', label: 'Next week or month' },
+      { key: 'toggleLibraryPanel', label: 'Toggle library panel' },
+    ],
+  },
+];
+
+/** The shortcut that `combo` would clash with if assigned to `actionKey`, or null. */
+export function findShortcutConflict(shortcuts, actionKey, combo) {
+  const groupOf = (key) => SHORTCUT_GROUPS.find((g) => g.rows.some((r) => r.key === key))?.id;
+  const ownGroup = groupOf(actionKey);
+  for (const group of SHORTCUT_GROUPS) {
+    const overlaps = GLOBAL_GROUPS.includes(ownGroup) || GLOBAL_GROUPS.includes(group.id) || group.id === ownGroup;
+    if (!overlaps) continue;
+    for (const row of group.rows) {
+      if (row.key === actionKey) continue;
+      if ((shortcuts[row.key] || DEFAULT_SHORTCUTS[row.key]) === combo) return { ...row, group: group.label };
+    }
+  }
+  return null;
+}
+
+/** Saved shortcuts merged over the defaults. Anyone still on the old Alt+N for Add movie moves to the new N default. */
+export function loadShortcuts(saved) {
+  const merged = { ...DEFAULT_SHORTCUTS, ...(saved || {}) };
+  if (saved?.addMovie === 'Alt+N') merged.addMovie = DEFAULT_SHORTCUTS.addMovie;
+  return merged;
+}
+
+/** True for single-key shortcuts (no Ctrl/Alt/Cmd), which must not fire while typing in a field. */
+export function isBareKey(shortcut) {
+  const parts = (shortcut || '').split('+');
+  return !parts.some((p) => p === 'Ctrl' || p === 'Alt' || p === 'Cmd' || p === 'Meta');
+}
+
+export function isTypingTarget(el) {
+  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+}
 
 // With Shift held, e.key for the number row is "!" or "@" and Alt can change
 // letters on some layouts, so single letters and digits are matched by

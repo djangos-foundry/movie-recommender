@@ -80,6 +80,19 @@
     color: var(--accent);
   }
 
+  /* Toasts sit just above the tab bar */
+  .app-shell--mobile .toast {
+    left: 12px;
+    right: 12px;
+    bottom: calc(var(--m-tabbar-h) + env(safe-area-inset-bottom) + 12px);
+    z-index: 80;
+  }
+
+  .app-shell--mobile .toast > span {
+    flex: 1;
+    min-width: 0;
+  }
+
   /* ── Drawers ────────────────────────────────────────────────────────────── */
 
   .m-scrim {

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LIBRARY } from '../api/client';
+import ListPicker from './ListPicker';
+import { getListIcon } from './NewListModal';
 import {
   ArrowLeft,
   Star,
@@ -12,7 +14,7 @@ import {
   ExternalLink,
   User,
   ChevronRight,
-  Folder,
+  Library,
   Plus,
   Loader2,
 } from 'lucide-react';
@@ -114,21 +116,24 @@ export default function MovieDetailPage({
     }
   };
 
+  // Goes straight to Trash; the toast that follows offers Undo
   const handleRemove = async () => {
-    if (window.confirm(`Remove "${movie.title}" from this list?`)) {
-      try {
-        setIsRemoving(true);
-        await onRemoveItem(item.id);
-        onBack();
-      } catch (err) {
-        console.error('Failed to remove item:', err);
-      } finally {
-        setIsRemoving(false);
-      }
+    try {
+      setIsRemoving(true);
+      await onRemoveItem(item.id);
+      onBack();
+    } catch (err) {
+      console.error('Failed to remove item:', err);
+    } finally {
+      setIsRemoving(false);
     }
   };
 
   if (!item) return null;
+
+  // The saved list's own icon for the top-right pill (Library when it's in no list)
+  const savedList = lists.find((l) => l.id === item.list);
+  const ListIcon = savedList ? getListIcon(savedList.icon || 'Film') : Library;
 
   // Derived data
   const releaseYear = movie.release_date ? movie.release_date.substring(0, 4) : '';
@@ -179,17 +184,7 @@ export default function MovieDetailPage({
 
         {isPreview ? (
           <div className="mdp-topbar-right">
-            <select
-              className="mdp-add-select"
-              value={targetListId}
-              onChange={(e) => setTargetListId(e.target.value)}
-              aria-label="List to add to"
-            >
-              {lists.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-              <option value={LIBRARY}>Library (no list)</option>
-            </select>
+            <ListPicker lists={lists} value={targetListId} onChange={setTargetListId} label="" />
             <button
               type="button"
               onClick={handleAddToList}
@@ -202,11 +197,9 @@ export default function MovieDetailPage({
           </div>
         ) : (
           <div className="mdp-topbar-right">
-            <div className="mdp-list-pill" title={`Saved in list: ${item.list_name || 'My List'}`}>
-              <Folder size={12} className="mdp-list-pill__icon" />
-              <span className="mdp-list-pill__label">List</span>
-              <span className="mdp-list-pill__divider">·</span>
-              <span className="mdp-list-pill__name">{item.list_name || 'My List'}</span>
+            <div className="mdp-list-pill" title={`Saved in ${item.list_name || 'your library'}`}>
+              <span className="mdp-list-pill__icon"><ListIcon size={12} /></span>
+              <span className="mdp-list-pill__name">{item.list_name || 'Library'}</span>
             </div>
             <button
               type="button"
