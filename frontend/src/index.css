@@ -752,7 +752,8 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 4px;
-  min-width: 130px;
+  min-width: 170px;
+  white-space: nowrap;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
   z-index: 50;
   animation: fadeIn 0.1s ease forwards;
@@ -1438,6 +1439,146 @@ body {
   font-weight: 500;
   color: var(--text-primary);
   animation: fadeIn 0.15s ease forwards;
+}
+
+/* ==========================================================================
+   LIST PICKER (Add movie / web preview): rounded pill + sidebar-style menu
+   ========================================================================== */
+
+.lp {
+  position: relative;
+}
+
+.lp__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px 0 12px;
+  border-radius: 99px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  font-size: 12.5px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 0.13s, background 0.13s;
+}
+
+.lp__pill:hover,
+.lp__pill.is-open {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.lp__label {
+  color: var(--text-muted);
+}
+
+.lp__dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 99px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.lp__name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.lp__chevron {
+  color: var(--text-muted);
+  transition: transform 0.15s;
+}
+
+.lp__pill.is-open .lp__chevron {
+  transform: rotate(180deg);
+}
+
+.lp__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 10;
+  min-width: 220px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 5px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  animation: fadeIn 0.12s ease forwards;
+}
+
+.lp__option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.lp__option:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.lp__option.is-on {
+  background: var(--accent-dim);
+  color: var(--text-primary);
+}
+
+.lp__option-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.lp__option.is-on .lp__option-icon,
+.lp__option-check {
+  color: var(--accent);
+}
+
+.lp__option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lp__option-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.toast__action {
+  margin-left: 6px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.13s;
+}
+
+.toast__action:hover {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 /* ==========================================================================
@@ -2563,27 +2704,70 @@ select {
   color: var(--text-muted);
 }
 
+/* Icon picker: 9 popular icons + a More tile (40px tiles), then grouped extras (32px) */
 .nlm__icon-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, 40px);
   gap: 8px;
+  padding: 2px;
+}
+
+.nlm__icon-grid--sm {
+  grid-template-columns: repeat(auto-fill, 32px);
+  gap: 6px;
+}
+
+.nlm__more {
   max-height: 210px;
   overflow-y: auto;
-  padding: 2px;
+  margin-top: 4px;
+  padding: 2px 4px 2px 0;
+}
+
+.nlm__group + .nlm__group {
+  margin-top: 10px;
+}
+
+.nlm__group-label {
+  margin: 4px 2px 6px;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .nlm__icon-cell {
   position: relative;
-  aspect-ratio: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-md);
+  border-radius: 10px;
   background: var(--bg-surface);
   border: 1px solid var(--border-faint);
   color: var(--text-secondary);
   transition: all 0.13s ease;
   cursor: pointer;
+}
+
+.nlm__icon-cell--md {
+  width: 40px;
+  height: 40px;
+}
+
+.nlm__icon-cell--sm {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.nlm__icon-more {
+  flex-direction: column;
+  gap: 1px;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.nlm__icon-more.is-open {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .nlm__icon-cell:hover {
@@ -2601,8 +2785,8 @@ select {
 
 .nlm__icon-check {
   position: absolute;
-  top: 3px;
-  right: 3px;
+  top: -4px;
+  right: -4px;
   width: 13px;
   height: 13px;
   border-radius: 50%;
@@ -3093,16 +3277,17 @@ select {
   gap: 10px;
 }
 
-/* Redesigned List Pill (top-right) */
+/* List pill (top-right): the list's own icon in an accent dot, then its name */
 .mdp-list-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px 0 5px;
   border-radius: 99px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.10);
-  font-size: 11px;
+  font-size: 12px;
   transition: background 0.15s, border-color 0.15s;
 }
 
@@ -3112,21 +3297,15 @@ select {
 }
 
 .mdp-list-pill__icon {
-  color: var(--accent);
+  width: 22px;
+  height: 22px;
+  border-radius: 99px;
   flex-shrink: 0;
-}
-
-.mdp-list-pill__label {
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.mdp-list-pill__divider {
-  color: rgba(255, 255, 255, 0.25);
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-dim);
+  color: var(--accent);
 }
 
 .mdp-list-pill__name {
@@ -3137,13 +3316,14 @@ select {
 .mdp-remove-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
-  border-radius: var(--radius-sm);
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 99px;
   background: rgba(239, 68, 68, 0.10);
   border: 1px solid rgba(239, 68, 68, 0.25);
   color: #f87171;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   transition: all 0.15s;
 }

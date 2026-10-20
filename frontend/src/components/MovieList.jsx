@@ -27,11 +27,13 @@ export default function MovieList({
   onRemoveItem,
   onToggleLeftPanel,
   isLeftPanelOpen = false,
+  searchInputRef, // lets App's "Search this list" shortcut focus the box
 }) {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('added');
   const [sortOpen, setSortOpen] = useState(false);
-  const searchRef = useRef(null);
+  const ownSearchRef = useRef(null);
+  const searchRef = searchInputRef || ownSearchRef;
 
   const listName  = currentList?.name  || 'All Movies';
   const listColor = currentList?.color || '#f5c518';
@@ -81,6 +83,8 @@ export default function MovieList({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              // Esc leaves the box (the typed filter stays) so the page's shortcuts work again
+              onKeyDown={(e) => { if (e.key === 'Escape') e.currentTarget.blur(); }}
               placeholder={`Search ${listName}…`}
               className="topbar__search-input"
             />
@@ -94,7 +98,7 @@ export default function MovieList({
                 <X size={13} />
               </button>
             ) : (
-              <kbd className="topbar__search-kbd">{shortcuts.search || 'Ctrl+K'}</kbd>
+              <kbd className="topbar__search-kbd">{shortcuts.focusSearch || '/'}</kbd>
             )}
           </div>
         </div>
@@ -208,12 +212,10 @@ export default function MovieList({
                     <button
                       type="button"
                       className="movie-card__delete-btn"
-                      title={`Remove "${movie.title}"`}
+                      title={`Move "${movie.title}" to Trash`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (window.confirm(`Are you sure you want to remove "${movie.title}" from this list?`)) {
-                          onRemoveItem?.(item.id);
-                        }
+                        onRemoveItem?.(item.id);
                       }}
                       aria-label={`Remove ${movie.title}`}
                     >

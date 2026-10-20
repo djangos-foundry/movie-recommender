@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Film, Bookmark, CheckCircle2, Clock, Plus, Trash2, MoreVertical, Star } from 'lucide-react';
+import { Film, Bookmark, CheckCircle2, Clock, Plus, Trash2, MoreVertical, Star, Pencil, Shapes } from 'lucide-react';
 import { getListIcon } from './NewListModal';
 import BrandHeader from './BrandHeader';
 
@@ -18,6 +18,7 @@ export default function Sidebar({
   onDeleteList,
   onReorderCustomLists,
   onToggleFavourite,
+  onEditList,
   totalAllMoviesCount = 0,
   statusCounts = {},
 }) {
@@ -129,6 +130,32 @@ export default function Sidebar({
 
           {openMenuId === list.id && (
             <div className="sidebar__dropdown">
+              {/* Rename / Change icon: both open the list dialog in edit mode */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenMenuId(null);
+                  onEditList?.(list, 'name');
+                }}
+                className="sidebar__dropdown-item"
+              >
+                <Pencil size={12} />
+                <span>Rename</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenMenuId(null);
+                  onEditList?.(list, 'icon');
+                }}
+                className="sidebar__dropdown-item"
+              >
+                <Shapes size={12} />
+                <span>Change icon</span>
+              </button>
+
               {/* Favourite toggle */}
               <button
                 type="button"

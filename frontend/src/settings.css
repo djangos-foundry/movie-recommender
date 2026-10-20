@@ -256,6 +256,54 @@
   padding-top: 20px;
 }
 
+/* Keyboard shortcuts: one block per app section */
+/* Keyboard shortcuts: each category is its own card, so the sections read apart */
+.st-rows--grouped {
+  border-top: 0;
+}
+
+.st-group + .st-group {
+  margin-top: 28px;
+}
+
+.st-group:first-of-type {
+  margin-top: 8px;
+}
+
+.st-group__title {
+  padding: 0 4px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--st-mute);
+}
+
+.st-group__card {
+  border: 1px solid var(--st-line);
+  border-radius: 14px;
+  background: var(--st-nav);
+  overflow: hidden;
+}
+
+/* Shortcut rows sit a step below the category title */
+.st-group .st-row {
+  padding: 12px 16px;
+}
+
+.st-group .st-row:last-child {
+  border-bottom: 0;
+}
+
+.st-group .st-row__title {
+  font-size: 14px;
+}
+
+.st-group .st-key {
+  height: 28px;
+  font-size: 12px;
+}
+
 .st-swatches {
   display: flex;
   align-items: center;

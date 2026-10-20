@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, Star, Plus, Check, Loader2, Film } from 'lucide-react';
 import { searchTMDB, LIBRARY } from '../api/client';
+import ListPicker from './ListPicker';
 
 // Inline TMDB logo SVG (official blue T badge)
 function TmdbBadge() {
@@ -79,10 +80,9 @@ export default function MovieSearchModal({
 
   const getYear = (d) => d?.substring(0, 4) || '';
 
-  const targetListName = lists.find((l) => String(l.id) === String(targetListId))?.name || 'Library';
-
   return (
-    <div className="modal-overlay">
+    // Clicking the dimmed backdrop closes the dialog, like Escape
+    <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="amm">
         {/* ── Header ── */}
         <div className="amm__header">
@@ -91,23 +91,7 @@ export default function MovieSearchModal({
           </div>
 
           <div className="amm__header-right">
-            {/* List selector */}
-            <div className="amm__list-selector">
-              <span className="amm__list-label">Add to</span>
-              <div className="amm__list-select-wrap">
-                <select
-                  value={targetListId}
-                  onChange={(e) => setTargetListId(e.target.value)}
-                  className="amm__list-select"
-                >
-                  {lists.map((l) => (
-                    <option key={l.id} value={l.id}>{l.name}</option>
-                  ))}
-                  <option value={LIBRARY}>Library (no list)</option>
-                </select>
-                <span className="amm__list-select-caret">▾</span>
-              </div>
-            </div>
+            <ListPicker lists={lists} value={targetListId} onChange={setTargetListId} />
 
             <button onClick={onClose} className="amm__close-btn" aria-label="Close">
               <X size={16} />

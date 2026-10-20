@@ -14,7 +14,7 @@ import MobileTabBar from './components/MobileTabBar';
 import MobileMore from './components/MobileMore';
 import useIsMobile from './lib/useIsMobile';
 import './mobile.css';
-import { DEFAULT_SHORTCUTS, matchesShortcut } from './lib/shortcuts';
+import { DEFAULT_SHORTCUTS, matchesShortcut, loadShortcuts, isBareKey, isTypingTarget } from './lib/shortcuts';
 import { loadPrefs, savePrefs, applyAccent } from './lib/prefs';
 import {
   getLists,
@@ -33,10 +33,19 @@ import {
   getCalendarStatus,
   connectCalendar,
   disconnectCalendar,
+  restoreTrashEntry,
 } from './api/client';
 import { requestCalendarCode, browserTimeZone } from './lib/googleCalendar';
 
-import { AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, RefreshCw, CheckCircle2, Trash2 } from 'lucide-react';
+
+// Library poster-size shortcuts → the cardSize preference
+const CARD_SIZE_SHORTCUTS = [
+  { action: 'cardSmall', id: 'small', label: 'Small' },
+  { action: 'cardMedium', id: 'medium', label: 'Medium' },
+  { action: 'cardLarge', id: 'large', label: 'Large' },
+  { action: 'cardExtraLarge', id: 'extra-large', label: 'Extra large' },
+];
 
 export default function App() {
   // Sidebar open/collapse state (default open)
@@ -46,12 +55,14 @@ export default function App() {
   const [shortcuts, setShortcuts] = useState(() => {
     try {
       const saved = localStorage.getItem('cinetrack_shortcuts');
-      return saved ? { ...DEFAULT_SHORTCUTS, ...JSON.parse(saved) } : DEFAULT_SHORTCUTS;
+      return loadShortcuts(saved ? JSON.parse(saved) : null);
     } catch (e) {
       return DEFAULT_SHORTCUTS;
     }
   });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  // The Library list's own search box, focused by the "Search this list" shortcut
+  const librarySearchRef = React.useRef(null);
 
   // Lists & active navigation state
   const [lists, setLists] = useState([]);
@@ -86,9 +97,17 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState(null);
   const [backendError, setBackendError] = useState(null);
 
-  const showToast = (message, type = 'info') => {
-    setToastMessage({ message, type });
-    setTimeout(() => setToastMessage(null), 4000);
+  // `action` adds a button to the toast, e.g. { label: 'Undo', onClick }. A newer toast replaces
+  // the current one and restarts the timer, so an old timer never clears a fresh toast early.
+  const toastTimerRef = React.useRef(null);
+  const showToast = (message, type = 'info', action = null) => {
+    clearTimeout(toastTimerRef.current);
+    setToastMessage({ message, type, action });
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), action ? 6000 : 4000);
+  };
+  const dismissToast = () => {
+    clearTimeout(toastTimerRef.current);
+    setToastMessage(null);
   };
 
   const handleToggleSidebar = () => {
@@ -457,6 +476,14 @@ export default function App() {
     }
   };
 
+  // 5a. Rename a list / change its icon (from the sidebar's list menu)
+  const [listEdit, setListEdit] = useState(null); // { list, focus: 'name' | 'icon' }
+  const handleUpdateList = async (listId, changes) => {
+    const updated = await updateList(listId, changes);
+    setLists((prev) => prev.map((l) => (l.id === listId ? { ...l, ...changes, ...(updated || {}) } : l)));
+    showToast('List updated', 'success');
+  };
+
   // 5b. Toggle Favourite Handler
   const handleToggleFavourite = async (listId, newValue) => {
     // Optimistic update
@@ -520,7 +547,10 @@ export default function App() {
   };
 
   // 8. Remove List Item Handler
+  // Removing soft-deletes into Trash (30 days), so it happens straight away with an Undo
+  // instead of a confirm dialog.
   const handleRemoveItem = async (itemId) => {
+    const removed = allMovies.find((item) => item.id === itemId);
     try {
       await removeListItem(itemId);
       setAllMovies((prev) => prev.filter((item) => item.id !== itemId));
@@ -529,15 +559,29 @@ export default function App() {
         setViewMode('list');
       }
 
-      // Decrement list count
+      // Decrement the count of the list the movie was in
       setLists((prev) =>
         prev.map((l) =>
-          l.id === activeListId
+          l.id === removed?.list
             ? { ...l, items_count: Math.max(0, (l.items_count || 0) - 1) }
             : l
         )
       );
-      showToast('Movie removed from list', 'info');
+      const title = removed?.movie?.title;
+      showToast(title ? `Moved "${title}" to Trash` : 'Moved to Trash', 'trash', {
+        label: 'Undo',
+        onClick: async () => {
+          dismissToast();
+          try {
+            await restoreTrashEntry('item', itemId);
+            await fetchLists();
+            showToast(title ? `Restored "${title}"` : 'Restored', 'success');
+          } catch (err) {
+            console.error('Failed to restore item:', err);
+            showToast('Could not undo. The movie is still in Trash.', 'error');
+          }
+        },
+      });
     } catch (err) {
       console.error('Failed to remove item:', err);
       showToast('Failed to remove movie', 'error');
@@ -576,6 +620,10 @@ export default function App() {
           setIsNewListOpen(false);
           return;
         }
+        if (listEdit) {
+          setListEdit(null);
+          return;
+        }
         if (viewMode !== 'list') {
           setViewMode('list');
           setSelectedItem(null);
@@ -584,11 +632,14 @@ export default function App() {
         }
       }
 
-      // Every shortcut uses Ctrl or Alt, so they stay live while typing in a field
-      // (for example the movie-count box in Discover).
+      // Shortcuts with Ctrl or Alt stay live while typing in a field (for example the
+      // movie-count box in Discover); single-key ones like N only fire when you're not typing.
+      const isDialogOpen = isSearchOpen || isNewListOpen || !!listEdit || isTrashOpen || isAuthOpen;
+      const fires = (shortcut) => matchesShortcut(e, shortcut)
+        && !(isBareKey(shortcut) && (isTypingTarget(document.activeElement) || isDialogOpen));
 
       // Open / close Settings (default Ctrl+,)
-      if (matchesShortcut(e, shortcuts.settings)) {
+      if (fires(shortcuts.settings)) {
         e.preventDefault();
         setIsSettingsOpen((prev) => !prev);
         return;
@@ -598,62 +649,76 @@ export default function App() {
       if (isSettingsOpen) return;
 
       // Toggle Trash (default Ctrl+Shift+Backspace)
-      if (matchesShortcut(e, shortcuts.toggleTrash)) {
+      if (fires(shortcuts.toggleTrash)) {
         e.preventDefault();
         setIsTrashOpen((prev) => !prev);
         return;
       }
 
       // Toggle left sidebar (default Alt+B)
-      if (matchesShortcut(e, shortcuts.toggleSidebar)) {
+      if (fires(shortcuts.toggleSidebar)) {
         e.preventDefault();
         setIsSidebarOpen((prev) => !prev);
         return;
       }
 
-      // Toggle the Discover filters panel (default Ctrl+Alt+B)
-      if (matchesShortcut(e, shortcuts.toggleFilters)) {
-        e.preventDefault();
-        if (activeSection === 'discover' && viewMode === 'list') {
-          setPrefs((prev) => ({ ...prev, filtersOpen: !prev.filtersOpen }));
-        }
-        return;
-      }
-
-      // Switch section (default Ctrl+Shift+1 / Ctrl+Shift+2)
-      if (matchesShortcut(e, shortcuts.goLibrary)) {
+      // Switch section (default Ctrl+Shift+1 / 2 / 3)
+      if (fires(shortcuts.goLibrary)) {
         e.preventDefault();
         selectSection('library');
         return;
       }
-      if (matchesShortcut(e, shortcuts.goDiscover)) {
+      if (fires(shortcuts.goDiscover)) {
         e.preventDefault();
         selectSection('discover');
         return;
       }
-      if (matchesShortcut(e, shortcuts.goSchedule)) {
+      if (fires(shortcuts.goSchedule)) {
         e.preventDefault();
         selectSection('schedule');
         return;
       }
 
-      // Search Movies / TMDB (default Ctrl+K)
-      if (matchesShortcut(e, shortcuts.search)) {
+      // Section shortcuts: only while that section's main view is showing.
+      // Calendar's own shortcuts live in Schedule.jsx.
+      if (viewMode !== 'list') return;
+
+      // Library: Add a movie (default N)
+      if (activeSection === 'library' && fires(shortcuts.addMovie)) {
         e.preventDefault();
         setIsSearchOpen(true);
         return;
       }
 
-      // Add Movie (default Alt+N)
-      if (matchesShortcut(e, shortcuts.addMovie)) {
+      // Library: jump into the list's search bar (default /); Esc there leaves it again
+      if (activeSection === 'library' && fires(shortcuts.focusSearch)) {
         e.preventDefault();
-        setIsSearchOpen(true);
+        librarySearchRef.current?.focus();
+        librarySearchRef.current?.select();
+        return;
+      }
+
+      // Library: poster size (default Ctrl+Shift+S / M / L / X), same setting as Settings › Appearance
+      if (activeSection === 'library') {
+        const size = CARD_SIZE_SHORTCUTS.find(({ action }) => fires(shortcuts[action]));
+        if (size) {
+          e.preventDefault();
+          setPrefs((prev) => ({ ...prev, cardSize: size.id }));
+          showToast(`Poster size: ${size.label}`, 'success');
+          return;
+        }
+      }
+
+      // Discover: toggle the filters panel (default Ctrl+Alt+B)
+      if (activeSection === 'discover' && fires(shortcuts.toggleFilters)) {
+        e.preventDefault();
+        setPrefs((prev) => ({ ...prev, filtersOpen: !prev.filtersOpen }));
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcuts, isSettingsOpen, isSearchOpen, isNewListOpen, viewMode, activeSection, selectSection]);
+  }, [shortcuts, isSettingsOpen, isSearchOpen, isNewListOpen, listEdit, isTrashOpen, isAuthOpen, viewMode, activeSection, selectSection]);
 
   // Set of movie IDs in the active list (for search modal to show 'Added')
   const existingMovieIds = useMemo(() => {
@@ -699,6 +764,7 @@ export default function App() {
     detailPage = (
       <MovieDetailPage
         item={selectedItem}
+        lists={lists}
         onBack={closeDetail}
         onUpdateItem={handleUpdateItem}
         onRemoveItem={handleRemoveItem}
@@ -764,6 +830,7 @@ export default function App() {
             onReorderCustomLists={handleReorderCustomLists}
             onDeleteList={handleDeleteList}
             onToggleFavourite={handleToggleFavourite}
+            onEditList={(list, focus) => { closeMobilePanel(); setListEdit({ list, focus }); }}
             totalAllMoviesCount={totalAllCount}
             statusCounts={statusCounts}
           />
@@ -781,6 +848,7 @@ export default function App() {
               onRemoveItem={handleRemoveItem}
               onToggleLeftPanel={toggleLeftPanel}
               isLeftPanelOpen={isLeftPanelOpen}
+              searchInputRef={librarySearchRef}
             />
           )}
         </>
@@ -823,6 +891,8 @@ export default function App() {
           isMobile={isMobile}
           mobilePanel={mobilePanel}
           onSetMobilePanel={setMobilePanel}
+          shortcuts={shortcuts}
+          isOtherDialogOpen={isSettingsOpen || isSearchOpen || isNewListOpen || !!listEdit || isTrashOpen || isAuthOpen}
           prefs={prefs}
         />
       )}
@@ -882,6 +952,15 @@ export default function App() {
         onCreate={handleCreateList}
       />
 
+      {/* Same dialog in edit mode: Rename / Change icon */}
+      <NewListModal
+        isOpen={!!listEdit}
+        editingList={listEdit?.list}
+        focus={listEdit?.focus}
+        onClose={() => setListEdit(null)}
+        onSave={handleUpdateList}
+      />
+
       {/* Trash */}
       <TrashModal
         isOpen={isTrashOpen}
@@ -891,11 +970,18 @@ export default function App() {
 
       {/* Toast */}
       {toastMessage && (
-        <div className="toast animate-fade-in">
+        <div className="toast animate-fade-in" role="status">
           {toastMessage.type === 'success'
             ? <CheckCircle2 size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-            : <AlertCircle  size={15} style={{ color: 'var(--red)',  flexShrink: 0 }} />}
+            : toastMessage.type === 'trash'
+              ? <Trash2 size={15} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+              : <AlertCircle size={15} style={{ color: 'var(--red)', flexShrink: 0 }} />}
           <span>{toastMessage.message}</span>
+          {toastMessage.action && (
+            <button type="button" className="toast__action" onClick={toastMessage.action.onClick}>
+              {toastMessage.action.label}
+            </button>
+          )}
         </div>
       )}
 
