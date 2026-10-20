@@ -1,5 +1,5 @@
 import React from 'react';
-import { CalendarDays, Clock, CheckCircle2 } from 'lucide-react';
+import { CalendarDays, Clock, CheckCircle2, Rows3, Square, Columns3, Columns4, Grid3x3 } from 'lucide-react';
 import BrandHeader from '../BrandHeader';
 import { getListIcon } from '../NewListModal';
 import { formatDuration, formatTime } from '../../lib/scheduleEngine';
@@ -10,6 +10,8 @@ const NAV_ITEMS = [
   { id: 'watched', label: 'Watched on plan', icon: CheckCircle2 },
 ];
 
+const VIEW_ICONS = { agenda: Rows3, day: Square, '3day': Columns3, week: Columns4, month: Grid3x3 };
+
 // Left rail for Calendar: same .sidebar shell as Library/Discover, but holds
 // navigation (Calendar / Upcoming / Watched on plan) plus a Lists filter for
 // the library panel on the right, instead of the tray itself.
@@ -17,6 +19,9 @@ export default function ScheduleSidebar({
   isOpen,
   navMode = 'calendar',
   onSelectNav,
+  views = null, // phones only: the calendar view picker lives here instead of the topbar
+  viewMode,
+  onSelectView,
   counts = {},
   lists = [],
   selectedListId = null,
@@ -33,8 +38,30 @@ export default function ScheduleSidebar({
       <BrandHeader />
 
       <nav className="sidebar__nav">
+        {views && (
+          <>
+            <div className="sidebar__section-label">View</div>
+            {views.map(({ id, label }) => {
+              const Icon = VIEW_ICONS[id] || CalendarDays;
+              const isActive = navMode === 'calendar' && viewMode === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onSelectView?.(id)}
+                  className={`sidebar__nav-item ${isActive ? 'sidebar__nav-item--active' : ''}`}
+                  aria-current={isActive ? 'true' : undefined}
+                >
+                  <Icon size={14} className="sidebar__nav-icon" />
+                  <span className="sidebar__nav-label">{label}</span>
+                </button>
+              );
+            })}
+            <div className="sidebar__divider" />
+          </>
+        )}
         <div className="sidebar__section-label">Calendar</div>
-        {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
+        {NAV_ITEMS.filter(({ id }) => !views || id !== 'calendar').map(({ id, label, icon: Icon }) => {
           const isActive = navMode === id;
           return (
             <button

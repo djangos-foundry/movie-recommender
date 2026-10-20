@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Shuffle, SlidersHorizontal, ChevronUp, ChevronDown, X, Globe, Loader2, Sparkles, Send } from 'lucide-react';
+import { Shuffle, SlidersHorizontal, ChevronUp, ChevronDown, X, Globe, Loader2, Sparkles, Send, PanelLeft, PanelRight } from 'lucide-react';
 import '../discover.css';
 import DiscoverSidebar from './discover/DiscoverSidebar';
 import DiscoverFilters from './discover/DiscoverFilters';
@@ -43,6 +43,8 @@ export default function Discover({
   prefs,
   onPrefsChange,
   isSidebarOpen = true,
+  onToggleLeftPanel,
+  onCloseMobilePanel,
   isFiltersOpen = true,
   onSetFiltersOpen,
   onOpenItem,
@@ -529,10 +531,10 @@ export default function Discover({
         keepHistory={prefs.keepHistory}
         rounds={rounds}
         viewedRoundId={viewedRound?.id ?? null}
-        onSelectRound={handleSelectRound}
+        onSelectRound={(id) => { onCloseMobilePanel?.(); handleSelectRound(id); }}
         onClearHistory={handleClearHistory}
         shortlist={shortlist}
-        onOpenShortlisted={openShortlisted}
+        onOpenShortlisted={(entry) => { onCloseMobilePanel?.(); openShortlisted(entry); }}
         onAddShortlisted={(entry) => addWebMovie(entry.movie)}
         onRemoveShortlisted={removeShortlisted}
         onClearShortlist={clearShortlist}
@@ -544,6 +546,15 @@ export default function Discover({
         <main className="dz-main">
           <header className="dz-topbar">
             <div className="dz-topbar__left">
+              <button
+                type="button"
+                className={`m-panel-btn mobile-only ${isSidebarOpen ? 'is-on' : ''}`}
+                aria-label="Rounds and shortlist"
+                aria-expanded={isSidebarOpen}
+                onClick={onToggleLeftPanel}
+              >
+                <PanelLeft size={18} />
+              </button>
               {source === 'web' ? (
                 <>
                   <Globe size={18} />
@@ -574,12 +585,22 @@ export default function Discover({
             </div>
             <button
               type="button"
-              className="dz-btn"
+              className="dz-btn desktop-only"
               aria-expanded={isFiltersOpen}
               onClick={() => onSetFiltersOpen?.(!isFiltersOpen)}
             >
               <SlidersHorizontal size={16} />Filters
               {filterCount > 0 && <span className="dz-badge">{filterCount}</span>}
+            </button>
+            <button
+              type="button"
+              className={`m-panel-btn mobile-only ${isFiltersOpen ? 'is-on' : ''}`}
+              aria-label="Filters"
+              aria-expanded={isFiltersOpen}
+              onClick={() => onSetFiltersOpen?.(!isFiltersOpen)}
+            >
+              <PanelRight size={18} />
+              {filterCount > 0 && <span className="m-panel-btn__badge">{filterCount}</span>}
             </button>
           </header>
 

@@ -1,0 +1,617 @@
+/* ==========================================================================
+   APP SHELL + PHONE LAYOUT
+   Below 768px (see lib/useIsMobile.js) the activity rail becomes a bottom
+   tab bar and every section's side panels become drawers over the content,
+   opened from panel buttons in that section's topbar.
+   ========================================================================== */
+
+.app-shell {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--bg-void);
+}
+
+.mobile-only {
+  display: none !important;
+}
+
+@media (max-width: 767px) {
+  :root {
+    --m-tabbar-h: 60px;
+    --m-drawer-w: min(300px, 86vw);
+  }
+
+  .mobile-only {
+    display: inline-flex !important;
+  }
+
+  .desktop-only {
+    display: none !important;
+  }
+
+  .app-shell--mobile {
+    height: 100dvh;
+    padding-bottom: calc(var(--m-tabbar-h) + env(safe-area-inset-bottom));
+  }
+
+  /* Section main columns fill the space above the tab bar instead of the full viewport */
+  .app-shell--mobile .main-content,
+  .app-shell--mobile .dz-main,
+  .app-shell--mobile .sc-main {
+    height: auto;
+    min-height: 0;
+  }
+
+  .app-shell--mobile > * {
+    min-height: 0;
+  }
+
+  /* ── Bottom tab bar ─────────────────────────────────────────────────────── */
+
+  .m-tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 70;
+    display: flex;
+    height: calc(var(--m-tabbar-h) + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--bg-deep);
+    border-top: 1px solid var(--border-faint);
+  }
+
+  .m-tabbar__tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 500;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .m-tabbar__tab.is-active {
+    color: var(--accent);
+  }
+
+  /* ── Drawers ────────────────────────────────────────────────────────────── */
+
+  .m-scrim {
+    position: fixed;
+    inset: 0 0 calc(var(--m-tabbar-h) + env(safe-area-inset-bottom));
+    z-index: 55;
+    background: rgba(0, 0, 0, 0.55);
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  /* Left: Library lists, Discover rounds/shortlist, Calendar views */
+  .app-shell--mobile .sidebar,
+  .app-shell--mobile .sidebar--open,
+  .app-shell--mobile .sidebar--closed {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: calc(var(--m-tabbar-h) + env(safe-area-inset-bottom));
+    height: auto;
+    width: var(--m-drawer-w);
+    min-width: 0;
+    z-index: 60;
+    border-right: 1px solid var(--border-subtle);
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .app-shell--mobile .sidebar--closed {
+    transform: translateX(-100%);
+    border-right-width: 0;
+  }
+
+  .app-shell--mobile .sidebar--open {
+    transform: translateX(0);
+  }
+
+  /* Right: Discover filters, Calendar library */
+  .app-shell--mobile .dz-filters,
+  .app-shell--mobile .sc-library {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: calc(var(--m-tabbar-h) + env(safe-area-inset-bottom));
+    height: auto;
+    width: var(--m-drawer-w);
+    min-width: 0;
+    z-index: 60;
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .app-shell--mobile .dz-filters--closed,
+  .app-shell--mobile .sc-library--closed {
+    transform: translateX(100%);
+    border-left-width: 0;
+  }
+
+  .app-shell--mobile .dz-filters__inner {
+    width: 100%;
+  }
+
+  /* ── Topbar panel buttons ───────────────────────────────────────────────── */
+
+  .m-panel-btn {
+    position: relative;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    background: transparent;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .m-panel-btn.is-on {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    background: var(--accent-dim);
+  }
+
+  .m-panel-btn__badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 99px;
+    background: var(--accent);
+    color: #000;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+  }
+
+  /* ── Library ────────────────────────────────────────────────────────────── */
+
+  .app-shell--mobile .topbar {
+    height: auto;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .app-shell--mobile .topbar__left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .app-shell--mobile .topbar__title {
+    font-size: 16px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .app-shell--mobile .topbar__search-wrap {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .app-shell--mobile .topbar__search-kbd {
+    display: none;
+  }
+
+  .app-shell--mobile .topbar__right {
+    gap: 8px;
+  }
+
+  .app-shell--mobile .topbar__right .topbar__sort-btn,
+  .app-shell--mobile .topbar__right .topbar__add-btn {
+    height: 36px;
+  }
+
+  /* Icon-only Add on phones so the list name has room */
+  .app-shell--mobile .topbar__right .topbar__add-btn {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .app-shell--mobile .topbar__right .topbar__add-btn span {
+    display: none;
+  }
+
+  .app-shell--mobile .content-area {
+    padding: 12px;
+  }
+
+  /* Library and Discover both show three posters per row on phones */
+  .app-shell--mobile .movie-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    --card-gap: 10px;
+  }
+
+  /* Touch has no hover, so the remove button is always visible */
+  .app-shell--mobile .movie-card__delete-btn {
+    opacity: 1;
+  }
+
+  /* ── Discover ───────────────────────────────────────────────────────────── */
+
+  .app-shell--mobile .dz-topbar {
+    height: auto;
+    min-height: 56px;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .app-shell--mobile .dz-topbar__left {
+    min-width: 0;
+    gap: 10px;
+  }
+
+  .app-shell--mobile .dz-meter {
+    display: none;
+  }
+
+  .app-shell--mobile .dz-grid,
+  .app-shell--mobile .dz-grid--filters-open,
+  .app-shell--mobile .dz-grid--filters-closed {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  /* Compact cards to fit three across */
+  .app-shell--mobile .dz-card,
+  .app-shell--mobile .dz-card__open {
+    gap: 6px;
+  }
+
+  .app-shell--mobile .dz-card__title {
+    font-size: 12px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .app-shell--mobile .dz-card__meta {
+    font-size: 10.5px;
+  }
+
+  .app-shell--mobile .dz-card .dz-pill {
+    top: 5px;
+    left: 5px;
+    height: 20px;
+    padding: 0 7px;
+    font-size: 10px;
+  }
+
+  .app-shell--mobile .dz-card .dz-mark {
+    top: 5px;
+    right: 5px;
+    width: 26px;
+    height: 26px;
+  }
+
+  .app-shell--mobile .dz-card .dz-btn--sm {
+    height: 30px;
+    padding: 0 6px;
+    gap: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .app-shell--mobile .dz-stage--empty {
+    padding: 20px 14px 32px;
+  }
+
+  .app-shell--mobile .dz-composer--dock {
+    width: calc(100% - 20px);
+  }
+
+  .app-shell--mobile .dz-composer,
+  .app-shell--mobile .dz-stage--empty .dz-composer {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  /* Mode and count share a row; the Recommend button takes the full width below */
+  .app-shell--mobile .dz-composer__row {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .app-shell--mobile .dz-composer__spacer {
+    display: none;
+  }
+
+  .app-shell--mobile .dz-composer__row .dz-cta {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  /* ── Calendar ───────────────────────────────────────────────────────────── */
+
+  .app-shell--mobile .sc-main {
+    position: relative;
+  }
+
+  .app-shell--mobile .sc-topbar {
+    gap: 8px;
+    padding: 0 12px;
+  }
+
+  .app-shell--mobile .sc-topbar__left,
+  .app-shell--mobile .sc-datenav {
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .app-shell--mobile .sc-topbar__title {
+    margin-left: 2px;
+    font-size: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .app-shell--mobile .sc-calendar-wrap {
+    padding: 6px 4px 0 0;
+  }
+
+  .app-shell--mobile .sc-agenda-scroll {
+    padding: 14px 12px 88px;
+  }
+
+  /* The mini month beside the agenda has no room on a phone */
+  .app-shell--mobile .sc-agenda-cal {
+    display: none;
+  }
+
+  /* Schedule dialog: date on its own row, start and end times side by side */
+  .app-shell--mobile .sc-row {
+    flex-wrap: wrap;
+  }
+
+  .app-shell--mobile .sc-row > .sc-field {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+  }
+
+  .app-shell--mobile .sc-row > .sc-field:first-child:nth-last-child(3) {
+    flex-basis: 100%;
+  }
+
+  .app-shell--mobile .sc-row .sc-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .sc-fab {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    z-index: 5;
+    width: 54px;
+    height: 54px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 16px;
+    background: var(--accent);
+    color: #000;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  }
+
+  /* ── Settings: section nav becomes a scrolling chip row above the page ──── */
+
+  .app-shell--mobile .st-overlay {
+    padding: 0;
+  }
+
+  .app-shell--mobile .st {
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    border: 0;
+  }
+
+  .app-shell--mobile .st__nav {
+    width: 100%;
+    gap: 10px;
+    padding: 14px 12px 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--st-line);
+  }
+
+  .app-shell--mobile .st__nav-head {
+    padding: 0 4px;
+  }
+
+  .app-shell--mobile .st__nav-list {
+    flex-direction: row;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .app-shell--mobile .st-nav {
+    width: auto;
+    height: 36px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .app-shell--mobile .st__content-inner {
+    padding: 20px 16px 32px;
+  }
+
+  .app-shell--mobile .st-row {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 16px 0;
+  }
+
+  .app-shell--mobile .st-row__control {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  /* ── More ───────────────────────────────────────────────────────────────── */
+
+  .m-more {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-base);
+  }
+
+  .m-more__head {
+    height: 56px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    background: var(--bg-deep);
+    border-bottom: 1px solid var(--border-faint);
+    flex-shrink: 0;
+  }
+
+  .m-more__title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .m-more__body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 12px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .m-more__card {
+    background: var(--bg-deep);
+    border: 1px solid var(--border-faint);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .m-more__account {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .m-more__avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-dim);
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 14px;
+  }
+
+  .m-more__avatar--guest {
+    background: var(--bg-surface);
+    color: var(--text-muted);
+  }
+
+  .m-more__who {
+    min-width: 0;
+  }
+
+  .m-more__name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .m-more__email {
+    font-size: 12px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .m-more__google {
+    padding: 4px 14px 14px;
+  }
+
+  .m-more__stat {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-top: 1px solid var(--border-faint);
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .m-more__stat-value {
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .m-more__row {
+    width: 100%;
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 14px;
+    font-size: 14px;
+    color: var(--text-primary);
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .m-more__row + .m-more__row {
+    border-top: 1px solid var(--border-faint);
+  }
+
+  .m-more__row:active:not(:disabled) {
+    background: var(--bg-surface);
+  }
+
+  .m-more__row:disabled {
+    color: var(--text-secondary);
+  }
+
+  .m-more__row svg {
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+
+  .m-more__row span {
+    flex: 1;
+  }
+
+  .m-more__row--quiet {
+    color: var(--text-secondary);
+  }
+
+  .m-more__guest .m-more__row {
+    border-top: 1px solid var(--border-faint);
+  }
+
+  .m-more__chevron {
+    color: var(--text-muted) !important;
+  }
+}

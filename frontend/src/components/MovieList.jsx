@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Search, Plus, Star, Film, ChevronDown, FolderOpen, X } from 'lucide-react';
+import { Search, Plus, Star, Film, ChevronDown, FolderOpen, X, PanelLeft } from 'lucide-react';
 
 const STATUS_BADGES = {
   plan_to_watch: { label: 'Plan to Watch', cls: 'badge--blue' },
@@ -25,6 +25,8 @@ export default function MovieList({
   cardSize = 'medium',
   shortcuts = {},
   onRemoveItem,
+  onToggleLeftPanel,
+  isLeftPanelOpen = false,
 }) {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('added');
@@ -56,6 +58,15 @@ export default function MovieList({
       <header className="topbar">
         {/* Left: list title */}
         <div className="topbar__left">
+          <button
+            type="button"
+            className={`m-panel-btn mobile-only ${isLeftPanelOpen ? 'is-on' : ''}`}
+            aria-label="Lists"
+            aria-expanded={isLeftPanelOpen}
+            onClick={onToggleLeftPanel}
+          >
+            <PanelLeft size={18} />
+          </button>
           <h1 className="topbar__title">{listName}</h1>
           <span className="topbar__count">{items.length}</span>
         </div>
