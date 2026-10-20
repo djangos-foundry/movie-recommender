@@ -35,10 +35,23 @@ const DEFAULT_STORE = {
   counter: 0,
 };
 
+// Library keys used to be bare TMDB ids (603); they are now 'movie:603' so a movie and a
+// TV show sharing an id stay apart. Upgrade what an older version saved.
+const upgradeKey = (k) => (typeof k === 'number' || /^\d+$/.test(String(k)) ? `movie:${k}` : k);
+
+function upgradeStore(saved) {
+  const store = { ...DEFAULT_STORE, ...saved };
+  return {
+    ...store,
+    seen: (store.seen || []).map(upgradeKey),
+    rounds: (store.rounds || []).map((r) => (r.source === 'library' && r.keys ? { ...r, keys: r.keys.map(upgradeKey) } : r)),
+    shortlist: (store.shortlist || []).map((e) => (e.source === 'library' ? { ...e, key: upgradeKey(e.key) } : e)),
+  };
+}
+
 export default function Discover({
   visible = true,
   items = [],
-  lists = [],
   isLoading = false,
   libraryIds = new Set(),
   prefs,
@@ -56,7 +69,7 @@ export default function Discover({
   userKey = 'guest', // rounds and shortlist are kept per account, not per browser
 }) {
   const storeKey = `${STORE_KEY}::${userKey}`;
-  const [store, setStore] = useState(() => ({ ...DEFAULT_STORE, ...loadJson(storeKey, {}) }));
+  const [store, setStore] = useState(() => upgradeStore(loadJson(storeKey, {})));
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [source, setSource] = useState(prefs.discoverSource);
   const [countText, setCountText] = useState(String(prefs.discoverCount));
@@ -73,7 +86,8 @@ export default function Discover({
   useEffect(() => { setCountText(String(prefs.discoverCount)); }, [prefs.discoverCount]);
 
   // ── Library, filters, bag ──────────────────────────────────────────────
-  const records = useMemo(() => buildRecords(items), [items]);
+  const includeTv = Boolean(prefs.includeTv);
+  const records = useMemo(() => buildRecords(items, { includeTv }), [items, includeTv]);
   const recordsByKey = useMemo(() => new Map(records.map((r) => [r.key, r])), [records]);
   const options = useMemo(() => getFilterOptions(records), [records]);
   const pool = useMemo(() => applyFilters(records, filters), [records, filters]);
@@ -90,17 +104,12 @@ export default function Discover({
   const previousRound = viewedIndex > 0 ? rounds[viewedIndex - 1] : null;
   const isEmptyStage = rounds.length === 0;
 
-  const defaultListId = useMemo(() => {
-    const plan = lists.find((l) => (l.name || '').toLowerCase().trim() === 'plan to watch');
-    return (plan || lists[0])?.id;
-  }, [lists]);
-
   // Turn a stored round back into the movies to show
   const resolveRound = (round) => {
     if (!round) return [];
     if (round.source === 'web') {
       return (round.movies || []).map((movie) => ({
-        key: movie.tmdb_id, movie, status: null, web: true, rec: recordsByKey.get(movie.tmdb_id),
+        key: movie.tmdb_id, movie, status: null, web: true, rec: recordsByKey.get(titleKey(movie)),
       }));
     }
     return (round.keys || [])
@@ -335,15 +344,17 @@ export default function Discover({
   const clearShortlist = () => setStore((s) => ({ ...s, shortlist: [] }));
 
   const openShortlisted = (entry) => {
-    const rec = recordsByKey.get(entry.key);
+    const key = entry.source === 'web' ? titleKey(entry.movie || { tmdb_id: entry.key }) : entry.key;
+    const rec = recordsByKey.get(key);
     if (rec?.items[0]) onOpenItem?.(rec.items[0]);
   };
 
   const addWebMovie = async (movie) => {
     try {
       setAddingKey(movie.tmdb_id);
-      // Add quietly (App shows a toast); the card flips to "In library" without leaving Discover
-      await onAddMovie?.(defaultListId ?? LIBRARY, movie, { openDetail: false });
+      // Add quietly (App shows a toast); the card flips to "In library" without leaving Discover.
+      // Discover picks always land in Library only, as Plan to Watch.
+      await onAddMovie?.(LIBRARY, movie, { openDetail: false, status: 'plan_to_watch' });
       // No longer a candidate once it is in a list
       removeShortlisted({ source: 'web', key: movie.tmdb_id });
     } catch (err) {
@@ -376,6 +387,7 @@ export default function Discover({
 
   const chips = [];
   const addChip = (label, remove) => chips.push({ label, remove });
+  if (filters.mediaType) addChip(filters.mediaType === 'tv' ? 'TV shows' : 'Movies', () => patchFilters({ mediaType: null }));
   filters.statuses.forEach((s) => addChip(STATUS_LABELS[s] || s, () => patchFilters({ statuses: filters.statuses.filter((x) => x !== s) })));
   filters.genres.forEach((g) => addChip(g, () => patchFilters({ genres: filters.genres.filter((x) => x !== g) })));
   filters.lists.forEach((id) => {
@@ -501,21 +513,23 @@ export default function Discover({
   );
 
   const renderCards = (cards) => (
-    <div className={`dz-grid ${isFiltersOpen ? 'dz-grid--filters-open' : 'dz-grid--filters-closed'}`}>
-      {cards.map((c) => (
-        <DiscoverCard
-          key={`${c.web ? 'w' : 'l'}-${c.key}`}
-          movie={c.movie}
-          status={c.status}
-          isWeb={c.web}
-          isBookmarked={isBookmarked(c.web ? 'web' : 'library', c.key)}
-          inLibrary={Boolean(c.rec) || libraryIds.has(titleKey(c.movie))}
-          isAdding={addingKey === c.movie.tmdb_id}
-          onOpen={c.rec ? () => onOpenItem?.(c.rec.items[0]) : () => onPreviewWeb?.(c.movie)}
-          onToggleBookmark={() => toggleBookmark(c.web ? 'web' : 'library', c.key, c.movie)}
-          onAdd={() => addWebMovie(c.movie)}
-        />
-      ))}
+    <div className="dz-grid-wrap">
+      <div className={`dz-grid ${isFiltersOpen ? 'dz-grid--filters-open' : 'dz-grid--filters-closed'}`}>
+        {cards.map((c) => (
+          <DiscoverCard
+            key={`${c.web ? 'w' : 'l'}-${c.key}`}
+            movie={c.movie}
+            status={c.status}
+            isWeb={c.web}
+            isBookmarked={isBookmarked(c.web ? 'web' : 'library', c.key)}
+            inLibrary={Boolean(c.rec) || libraryIds.has(titleKey(c.movie))}
+            isAdding={addingKey === c.movie.tmdb_id}
+            onOpen={c.rec ? () => onOpenItem?.(c.rec.items[0]) : () => onPreviewWeb?.(c.movie)}
+            onToggleBookmark={() => toggleBookmark(c.web ? 'web' : 'library', c.key, c.movie)}
+            onAdd={() => addWebMovie(c.movie)}
+          />
+        ))}
+      </div>
     </div>
   );
 

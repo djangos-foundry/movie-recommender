@@ -22,6 +22,7 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from ..models import GoogleCalendarConnection, ScheduledWatch
+from .episodes import episode_label
 
 logger = logging.getLogger(__name__)
 
@@ -201,10 +202,12 @@ def event_body(watch):
 
 
 def episode_title(watch):
-    """'Severance · S2E6' for a show's scheduled episode, else just the title."""
+    """'Severance · S2E6' (or 'S2E6–E8' for a binge block) for a show's scheduled
+    episode, else just the title."""
     title = watch.movie.title
     if watch.season_number is not None and watch.episode_number is not None:
-        return f"{title} · S{watch.season_number}E{watch.episode_number}"
+        label = episode_label(watch.movie, watch.season_number, watch.episode_number, watch.episode_count or 1)
+        return f"{title} · {label}"
     return title
 
 

@@ -9,7 +9,7 @@ import {
   combineEndTime,
   addMinutes,
 } from '../../lib/scheduleEngine';
-import { isTv, titleKey, seasonsLabel } from '../../lib/media';
+import { isTv, titleKey, seasonsLabel, episodeLabel } from '../../lib/media';
 
 const ANCHORED_WIDTH = 460;
 const ANCHORED_HEIGHT_ESTIMATE = 520;
@@ -69,6 +69,7 @@ export default function ScheduleModal({
   // Which episode, when the pick is a TV show
   const [season, setSeason] = useState('');
   const [episode, setEpisode] = useState('');
+  const [count, setCount] = useState('1'); // episodes in a row (a binge block)
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const panelRef = useRef(null);
@@ -83,12 +84,14 @@ export default function ScheduleModal({
       setMovie(editingEvent.movie);
       setSeason(editingEvent.season != null ? String(editingEvent.season) : '');
       setEpisode(editingEvent.episode != null ? String(editingEvent.episode) : '');
+      setCount(String(editingEvent.count || 1));
       setDateStr(toDateInputValue(editingEvent.start));
       setTimeStr(toTimeInputValue(editingEvent.start));
       setEndTimeStr(toTimeInputValue(editingEvent.end));
     } else {
       setMovie(initialMovie);
       pickEpisode(initialMovie);
+      setCount('1');
       const base = initialDate || new Date();
       setDateStr(toDateInputValue(base));
       setTimeStr(initialDate ? toTimeInputValue(initialDate) : '14:00');
@@ -101,14 +104,15 @@ export default function ScheduleModal({
     setError('');
   }, [isOpen, editingEvent, initialMovie, initialDate]);
 
-  // The end time auto-fills from the movie's runtime whenever the movie or
-  // start time changes — but stops the moment you edit it yourself, so a
-  // manual tweak isn't clobbered by the next keystroke in the start field.
+  // The end time auto-fills from the movie's runtime (a show's episode length times the
+  // number of episodes) whenever the movie, start time or count changes — but stops the
+  // moment you edit it yourself, so a manual tweak isn't clobbered by the next keystroke.
+  const episodes = isTv(movie) ? Math.min(50, Math.max(1, Number(count) || 1)) : 1;
   useEffect(() => {
     if (endTouched) return;
     const s = combineDateTime(dateStr, timeStr);
-    if (movie && s) setEndTimeStr(toTimeInputValue(addMinutes(s, runtimeOf(movie))));
-  }, [movie, dateStr, timeStr, endTouched]);
+    if (movie && s) setEndTimeStr(toTimeInputValue(addMinutes(s, runtimeOf(movie) * episodes)));
+  }, [movie, dateStr, timeStr, endTouched, episodes]);
 
   // A show starts on the episode after your progress (S1E1 if not started)
   function pickEpisode(m) {
@@ -165,6 +169,7 @@ export default function ScheduleModal({
         notes: notes.trim(),
         seasonNumber,
         episodeNumber,
+        episodeCount: tv ? episodes : 1,
       });
       onClose();
     } catch (err) {
@@ -298,7 +303,24 @@ export default function ScheduleModal({
                   onChange={(e) => setEpisode(e.target.value)}
                 />
               </div>
+              <div className="sc-field">
+                <label className="sc-field__label">Episodes</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  className="sc-input"
+                  value={count}
+                  onChange={(e) => setCount(e.target.value)}
+                  title="Watch several in a row"
+                />
+              </div>
             </div>
+          )}
+          {showPicked && !pickerOpen && episodes > 1 && season !== '' && episode !== '' && (
+            <p className="sc-hint sc-hint--block">
+              {episodeLabel(movie, Number(season), Number(episode), episodes)} · {formatDuration(runtimeOf(movie) * episodes)}
+            </p>
           )}
 
           <div className="sc-row">

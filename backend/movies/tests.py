@@ -661,3 +661,130 @@ class TvDetailsMappingTests(SimpleTestCase):
         self.assertEqual(d['cast'][0]['character'], 'Mark S.')
         self.assertEqual((d['imdb_id'], d['networks'][0]['name']), ('tt11280740', 'Apple TV+'))
         self.assertEqual(d['seasons'][0]['episode_count'], 9)
+
+
+class ListMembershipAndTrashTests(APITestCase):
+    """Tick boxes for a movie's lists, deleting lists, and emptying Trash."""
+
+    def setUp(self):
+        self.c = APIClient()
+        self.a = self.c.post('/api/lists/', {'name': 'A'}, format='json').json()
+        self.b = self.c.post('/api/lists/', {'name': 'B'}, format='json').json()
+
+    def add(self, list_id, tmdb_id=604, **extra):
+        movie = {'tmdb_id': tmdb_id, 'title': f'M{tmdb_id}', 'overview': 'x', 'cast': [{'name': 'A'}], 'director': 'D'}
+        with patch.object(tmdb_service, 'get_movie_details', return_value=None):
+            return self.c.post(f'/api/lists/{list_id}/movies/', {'movie': movie, **extra}, format='json').json()
+
+    def library(self):
+        return self.c.get('/api/library/movies/').json()
+
+    def test_ticking_lists_adds_and_removes_entries_and_copies_status(self):
+        item = self.add(self.a['id'], status='completed')
+        res = self.c.put(f"/api/list-items/{item['id']}/lists/", {'list_ids': [self.a['id'], self.b['id']]}, format='json')
+        self.assertEqual(res.status_code, 200)
+        entries = self.library()
+        self.assertEqual(sorted(e['list'] for e in entries), sorted([self.a['id'], self.b['id']]))
+        self.assertTrue(all(e['status'] == 'completed' for e in entries))
+        # Unticking A keeps the movie, now only in B; the response points at a surviving entry
+        res = self.c.put(f"/api/list-items/{item['id']}/lists/", {'list_ids': [self.b['id']]}, format='json').json()
+        self.assertEqual(res['item']['list'], self.b['id'])
+        self.assertEqual([e['list'] for e in self.library()], [self.b['id']])
+
+    def test_no_lists_means_library_only(self):
+        item = self.add(self.a['id'])
+        res = self.c.put(f"/api/list-items/{item['id']}/lists/", {'list_ids': []}, format='json').json()
+        library_id = MovieList.all_objects.get(is_system=True).id
+        self.assertEqual([e['list'] for e in self.library()], [library_id])
+        # ...and ticking a list again moves it out of Library-only
+        self.c.put(f"/api/list-items/{res['item']['id']}/lists/", {'list_ids': [self.a['id']]}, format='json')
+        self.assertEqual([e['list'] for e in self.library()], [self.a['id']])
+
+    def test_unknown_or_foreign_list_is_rejected(self):
+        item = self.add(self.a['id'])
+        other = APIClient().post('/api/lists/', {'name': 'Theirs'}, format='json').json()
+        res = self.c.put(f"/api/list-items/{item['id']}/lists/", {'list_ids': [other['id']]}, format='json')
+        self.assertEqual(res.status_code, 400)
+
+    def test_deleting_a_list_keeps_movies_that_are_in_another_list(self):
+        shared = self.add(self.a['id'], tmdb_id=1)
+        self.c.put(f"/api/list-items/{shared['id']}/lists/", {'list_ids': [self.a['id'], self.b['id']]}, format='json')
+        self.add(self.a['id'], tmdb_id=2)  # only in A
+        self.c.delete(f"/api/lists/{self.a['id']}/")
+        self.assertEqual([e['movie']['tmdb_id'] for e in self.library()], [1])
+        trashed = self.c.get('/api/trash/').json()['results']
+        self.assertEqual((trashed[0]['items_count'], trashed[0]['only_here_count']), (2, 1))
+        self.c.delete(f"/api/trash/list/{self.a['id']}/")
+        self.assertEqual([e['movie']['tmdb_id'] for e in self.library()], [1])
+
+    def test_empty_trash_deletes_everything_in_it(self):
+        item = self.add(self.a['id'], tmdb_id=1)
+        self.add(self.b['id'], tmdb_id=2)
+        self.c.delete(f"/api/list-items/{item['id']}/")
+        self.c.delete(f"/api/lists/{self.b['id']}/")
+        self.assertEqual(self.c.get('/api/trash/').json()['count'], 2)
+        self.assertEqual(self.c.delete('/api/trash/').json()['deleted'], 2)
+        self.assertEqual(self.c.get('/api/trash/').json()['count'], 0)
+        self.assertFalse(MovieList.all_objects.filter(id=self.b['id']).exists())
+
+
+class EpisodeProgressTests(APITestCase):
+    """Binge blocks and ticking a scheduled episode off."""
+
+    SHOW = {
+        'tmdb_id': 95396, 'media_type': 'tv', 'title': 'Show', 'overview': 'x', 'cast': [{'name': 'A'}],
+        'seasons': [{'season_number': 0, 'episode_count': 1}, {'season_number': 1, 'episode_count': 9},
+                    {'season_number': 2, 'episode_count': 10}],
+    }
+
+    def setUp(self):
+        self.c = APIClient()
+        with patch.object(tmdb_service, 'get_tv_details', return_value=None):
+            self.item = self.c.post('/api/library/movies/', {'movie': self.SHOW}, format='json').json()
+
+    def schedule(self, season, episode, count=1):
+        return self.c.post('/api/schedule/', {
+            'movie_id': self.item['movie']['id'], 'season_number': season, 'episode_number': episode,
+            'episode_count': count, 'start_time': '2030-01-01T20:00:00Z', 'end_time': '2030-01-01T23:00:00Z',
+        }, format='json').json()
+
+    def test_labels_and_block_ends(self):
+        from .models import Movie
+        from .services.episodes import episode_label, block_end
+        movie = Movie.objects.get(media_type='tv')
+        self.assertEqual(episode_label(movie, 2, 8), 'S2E8')
+        self.assertEqual(episode_label(movie, 2, 8, 3), 'S2E8–E10')
+        self.assertEqual(episode_label(movie, 1, 8, 3), 'S1E8–S2E1')
+        self.assertEqual(block_end(movie, 2, 9, 5), (2, 10))  # stops at the last known episode
+
+    def test_watched_block_moves_progress_and_status(self):
+        watch = self.schedule(1, 8, count=3)
+        self.c.patch(f"/api/schedule/{watch['id']}/", {'is_watched': True}, format='json')
+        item = self.c.get(f"/api/list-items/{self.item['id']}/").json()
+        self.assertEqual((item['current_season'], item['current_episode'], item['status']), (2, 1, 'watching'))
+
+    def test_watched_episode_never_moves_progress_back(self):
+        self.c.patch(f"/api/list-items/{self.item['id']}/", {'current_season': 2, 'current_episode': 5}, format='json')
+        watch = self.schedule(1, 3)
+        self.c.patch(f"/api/schedule/{watch['id']}/", {'is_watched': True}, format='json')
+        item = self.c.get(f"/api/list-items/{self.item['id']}/").json()
+        self.assertEqual((item['current_season'], item['current_episode']), (2, 5))
+
+    def test_episode_count_is_bounded(self):
+        res = self.c.post('/api/schedule/', {
+            'movie_id': self.item['movie']['id'], 'season_number': 1, 'episode_number': 1, 'episode_count': 0,
+            'start_time': '2030-01-01T20:00:00Z', 'end_time': '2030-01-01T21:00:00Z',
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+
+    def test_season_endpoint_maps_episodes(self):
+        from django.core.cache import cache
+        cache.clear()
+        payload = {'season_number': 2, 'name': 'Season 2', 'episodes': [
+            {'episode_number': 1, 'name': 'Hello, Ms. Cobel', 'air_date': '2025-01-17', 'runtime': 56, 'still_path': '/x.jpg'},
+        ]}
+        with patch.object(tmdb_service, 'api_key', 'k'), \
+             patch('movies.services.tmdb._http.get', return_value=FakeResponse(200, payload)):
+            res = self.client.get('/api/tmdb/tv/95396/season/2/').json()
+        self.assertEqual(res['episodes'][0]['name'], 'Hello, Ms. Cobel')
+        self.assertTrue(res['episodes'][0]['still_path'].endswith('/x.jpg'))

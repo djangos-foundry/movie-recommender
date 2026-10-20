@@ -28,6 +28,7 @@ export const EMPTY_FILTERS = {
   minRating: null,
   runtimeMax: null,
   title: '', // free-text title query, matched on letters and digits only
+  mediaType: null, // 'movie' | 'tv', only ever set by Ask ("a short series"); there's no TV-only filter control
 };
 
 // TMDB returns ISO-639-1 codes; show something readable for the common ones
@@ -63,12 +64,12 @@ function castNames(movie) {
     .filter(Boolean);
 }
 
-/** Collapse the per-list items into one record per distinct movie. TV shows are
- * left out: Discover only recommends movies for now. */
-export function buildRecords(items) {
+/** Collapse the per-list items into one record per distinct movie. TV shows join in only
+ * when Settings > Library > Include TV shows is on. */
+export function buildRecords(items, { includeTv = false } = {}) {
   const byKey = new Map();
   for (const item of items) {
-    if (isTv(item.movie)) continue;
+    if (!includeTv && isTv(item.movie)) continue;
     const key = movieKey(item.movie, `item-${item.id}`);
     const existing = byKey.get(key);
     if (existing) existing.items.push(item);
@@ -86,6 +87,7 @@ export function activeFilterCount(filters) {
   if (filters.minRating !== null) n += 1;
   if (filters.runtimeMax !== null) n += 1;
   if ((filters.title || '').trim()) n += 1;
+  if (filters.mediaType) n += 1;
   return n;
 }
 
@@ -105,6 +107,7 @@ export function applyFilters(records, filters) {
   const titleQuery = normalizeTitle(filters.title);
 
   return records.filter(({ movie, items }) => {
+    if (filters.mediaType && (isTv(movie) ? 'tv' : 'movie') !== filters.mediaType) return false;
     if (titleQuery
       && !normalizeTitle(movie.title).includes(titleQuery)
       && !normalizeTitle(movie.original_title).includes(titleQuery)) return false;
@@ -149,8 +152,10 @@ export function getFilterOptions(records) {
   const statuses = [];
   const listCounts = new Map();
   const titles = new Set();
+  let hasShows = false;
 
   for (const { movie, items } of records) {
+    if (isTv(movie)) hasShows = true;
     if ((movie.title || '').trim()) titles.add(movie.title.trim());
     genres.push(...(movie.genres || []).map((g) => String(g).trim()).filter(Boolean));
     if ((movie.director || '').trim()) directors.push(movie.director.trim());
@@ -180,6 +185,7 @@ export function getFilterOptions(records) {
     years: { min: years.length ? Math.min(...years) : 0, max: years.length ? Math.max(...years) : 0 },
     runtime: { max: runtimes.length ? Math.max(...runtimes) : 0 },
     titles: [...titles],
+    hasShows, // only then do "show" / "series" (or "movie") in Ask narrow the kind of title
   };
 }
 
@@ -390,6 +396,18 @@ export function analyzeLibraryAsk(message, options) {
     claim(new RegExp(bestList.s.split(' ').map(escapeRe).join('[^a-z0-9]+')));
   }
 
+  // Movies or shows: only meaningful once the library has shows in it. Both kinds of words
+  // ("movies and shows") means no narrowing.
+  if (options.hasShows) {
+    const tvWords = /\b(tv|tv shows?|shows?|series|sitcoms?|seasons?|episodes?)\b/;
+    const movieWords = /\b(movies?|films?)\b/;
+    const wantsTv = tvWords.test(text);
+    const wantsMovies = movieWords.test(text);
+    if (wantsTv !== wantsMovies) filters.mediaType = wantsTv ? 'tv' : 'movie';
+    if (wantsTv) claim(tvWords);
+    if (wantsMovies) claim(movieWords);
+  }
+
   for (const [re, statusValue] of ASK_STATUS_PHRASES) {
     if (re.test(text)) { filters.statuses = [statusValue]; claim(re); break; }
   }
@@ -487,6 +505,7 @@ export function parseLibraryAsk(message, options) {
  */
 export function describeLibraryFilters(filters, options) {
   const chips = [];
+  if (filters.mediaType) chips.push(filters.mediaType === 'tv' ? 'TV shows' : 'Movies');
   filters.statuses.forEach((s) => chips.push(STATUS_LABELS[s] || s));
   filters.genres.forEach((g) => chips.push(g));
   filters.lists.forEach((id) => {

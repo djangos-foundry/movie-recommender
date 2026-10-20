@@ -111,6 +111,7 @@ class ScheduledWatchSerializer(serializers.ModelSerializer):
             'notes',
             'season_number',
             'episode_number',
+            'episode_count',
             'is_watched',
             'google_event_id',
             'sync_status',
@@ -124,6 +125,8 @@ class ScheduledWatchSerializer(serializers.ModelSerializer):
         end = attrs.get('end_time', getattr(self.instance, 'end_time', None))
         if start and end and end <= start:
             raise serializers.ValidationError("end_time must be after start_time.")
+        if attrs.get('episode_count') is not None and not 1 <= attrs['episode_count'] <= 50:
+            raise serializers.ValidationError("episode_count must be between 1 and 50.")
         return attrs
 
 
@@ -137,17 +140,26 @@ def _days_remaining(deleted_at):
 class TrashedListSerializer(serializers.ModelSerializer):
     type = serializers.SerializerMethodField()
     items_count = serializers.SerializerMethodField()
+    only_here_count = serializers.SerializerMethodField()
     days_remaining = serializers.SerializerMethodField()
 
     class Meta:
         model = MovieList
-        fields = ['id', 'type', 'name', 'color', 'icon', 'items_count', 'deleted_at', 'days_remaining']
+        fields = ['id', 'type', 'name', 'color', 'icon', 'items_count', 'only_here_count', 'deleted_at', 'days_remaining']
 
     def get_type(self, obj):
         return 'list'
 
     def get_items_count(self, obj):
         return obj.items.filter(deleted_at__isnull=True).count()
+
+    def get_only_here_count(self, obj):
+        """Movies that were only in this list. Movies also in another list stay
+        in the library while the list is in Trash, and when it is deleted."""
+        elsewhere = MovieListItem.objects.filter(
+            list__owner=obj.owner, list__deleted_at__isnull=True,
+        ).exclude(list=obj).values('movie_id')
+        return obj.items.filter(deleted_at__isnull=True).exclude(movie_id__in=elsewhere).count()
 
     def get_days_remaining(self, obj):
         return _days_remaining(obj.deleted_at)

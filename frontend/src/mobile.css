@@ -645,3 +645,108 @@
     display: none;
   }
 }
+
+/* Movie / show page on phones: poster on top, then the title, pills and status at full
+   width (side by side the info column was squeezed into a narrow strip) */
+@media (max-width: 767px) {
+  .mdp-topbar {
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .mdp-back-btn,
+  .mdp-list-pill,
+  .mdp-remove-btn {
+    white-space: nowrap;
+  }
+
+  /* Back and Remove become icon-only so the list pill fits beside them */
+  .mdp-back-btn span,
+  .mdp-remove-btn span {
+    display: none;
+  }
+
+  .mdp-back-btn,
+  .mdp-remove-btn {
+    padding: 0 10px;
+    height: 32px;
+  }
+
+  .mdp-list-pill__name {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mdp-topbar-right {
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .mdp-backdrop-wrap {
+    height: 260px;
+  }
+
+  .mdp-hero-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    margin-top: -150px;
+    padding: 0 16px;
+  }
+
+  .mdp-poster-wrap {
+    width: 130px;
+    height: 195px;
+  }
+
+  .mdp-title {
+    font-size: 1.9rem;
+    overflow-wrap: anywhere;
+  }
+
+  .mdp-body {
+    padding: 28px 16px 48px;
+    gap: 28px;
+  }
+}
+
+/* Trash page on phones: icon-only Restore, and the Empty Trash label stays on one line */
+@media (max-width: 767px) {
+  .tp__row {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .tp__restore span {
+    display: none;
+  }
+
+  .tp__restore {
+    padding: 0 9px;
+  }
+
+  .tp__info .tp__when {
+    flex-wrap: wrap;
+  }
+
+  .tp__empty-btn {
+    padding: 0 10px;
+  }
+}
+
+/* Episode lists on phones: less indent, and the air date drops below the name */
+@media (max-width: 767px) {
+  .mdp-episodes {
+    padding-left: 8px;
+  }
+
+  .mdp-episode {
+    flex-wrap: wrap;
+  }
+
+  .mdp-episode__meta {
+    width: 100%;
+    padding-left: 56px;
+  }
+}

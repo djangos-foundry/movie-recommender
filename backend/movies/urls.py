@@ -10,9 +10,11 @@ from .views import (
     MovieListMoviesView,
     LibraryMoviesView,
     MovieListItemDetailView,
+    MovieListItemListsView,
     TMDBSearchView,
     TMDBMovieDetailView,
     TMDBTvDetailView,
+    TMDBTvSeasonView,
     RecommendationView,
     RecommendationFiltersView,
     ChatRecommendView,
@@ -48,11 +50,13 @@ urlpatterns = [
 
     # List items
     path('list-items/<int:pk>/', MovieListItemDetailView.as_view(), name='movie-list-item-detail'),
+    path('list-items/<int:pk>/lists/', MovieListItemListsView.as_view(), name='movie-list-item-lists'),
 
     # TMDB Integration
     path('tmdb/search/', TMDBSearchView.as_view(), name='tmdb-search'),
     path('tmdb/movie/<int:tmdb_id>/', TMDBMovieDetailView.as_view(), name='tmdb-movie-detail'),
     path('tmdb/tv/<int:tmdb_id>/', TMDBTvDetailView.as_view(), name='tmdb-tv-detail'),
+    path('tmdb/tv/<int:tmdb_id>/season/<int:season_number>/', TMDBTvSeasonView.as_view(), name='tmdb-tv-season'),
 
     # Recommendations
     path('recommendations/', RecommendationView.as_view(), name='recommendations'),

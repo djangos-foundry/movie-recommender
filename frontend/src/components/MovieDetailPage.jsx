@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { LIBRARY } from '../api/client';
+import { LIBRARY, getTvSeason } from '../api/client';
 import ListPicker from './ListPicker';
-import { getListIcon } from './NewListModal';
+import ListMembershipPicker from './ListMembershipPicker';
 import {
   ArrowLeft,
   Star,
@@ -14,12 +14,13 @@ import {
   ExternalLink,
   User,
   ChevronRight,
-  Library,
   Plus,
   Loader2,
   Tv,
   Minus,
   Radio,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import {
   isTv,
@@ -66,6 +67,9 @@ export default function MovieDetailPage({
   isPreview = false,
   lists = [],
   onAdd,
+  backLabel = 'Back to Movies',
+  memberListIds = [], // custom lists this movie is in (any of its entries)
+  onSetLists,
 }) {
   const movie = item?.movie || {};
   const [status, setStatus] = useState(item?.status || 'plan_to_watch');
@@ -77,6 +81,9 @@ export default function MovieDetailPage({
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [isSavingLists, setIsSavingLists] = useState(false);
+  // Seasons opened on a show's page: season number -> { status, episodes }
+  const [openSeasons, setOpenSeasons] = useState({});
   // TV progress: the last episode watched, or nulls before starting
   const [progress, setProgress] = useState({ season: item?.current_season ?? null, episode: item?.current_episode ?? null });
   // Latest progress, so quick repeated clicks each step from the one before
@@ -97,13 +104,10 @@ export default function MovieDetailPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.id]);
 
-  // Preview mode defaults the destination list to "Plan to Watch"
+  // Preview mode (a web pick from Discover) adds to Library only unless you pick a list
   useEffect(() => {
-    if (!isPreview) return;
-    if (lists.length === 0) { setTargetListId(LIBRARY); return; }
-    const plan = lists.find((l) => (l.name || '').toLowerCase().trim() === 'plan to watch');
-    setTargetListId(String((plan || lists[0]).id));
-  }, [isPreview, lists]);
+    if (isPreview) setTargetListId(LIBRARY);
+  }, [isPreview]);
 
   const handleAddToList = async () => {
     if (!targetListId || isAdding) return;
@@ -121,12 +125,13 @@ export default function MovieDetailPage({
     catch (err) { console.error('Failed to update status:', err); }
   };
 
-  // Moving progress on a show you haven't started also marks it as Watching
+  // Moving progress on a show you haven't started also marks it as Watching.
+  // `step` is 'next', 'previous', or an exact { season, episode } (an episode clicked in a season).
   const handleProgressChange = async (step) => {
     const current = progressRef.current;
-    const next = step === 'next'
-      ? nextEpisode(movie, current.season, current.episode)
-      : previousEpisode(movie, current.season, current.episode);
+    let next = step;
+    if (step === 'next') next = nextEpisode(movie, current.season, current.episode);
+    else if (step === 'previous') next = previousEpisode(movie, current.season, current.episode);
     if (step === 'next' && !next) return;
     const season = next ? next.season : null;
     const episode = next ? next.episode : null;
@@ -139,6 +144,20 @@ export default function MovieDetailPage({
     }
     try { await onUpdateItem(item.id, updates); }
     catch (err) { console.error('Failed to update progress:', err); }
+  };
+
+  const toggleSeason = async (seasonNumber) => {
+    if (openSeasons[seasonNumber]) {
+      setOpenSeasons(({ [seasonNumber]: _closed, ...rest }) => rest);
+      return;
+    }
+    setOpenSeasons((prev) => ({ ...prev, [seasonNumber]: { status: 'loading', episodes: [] } }));
+    try {
+      const data = await getTvSeason(movie.tmdb_id, seasonNumber);
+      setOpenSeasons((prev) => (prev[seasonNumber] ? { ...prev, [seasonNumber]: { status: 'ok', episodes: data.episodes || [] } } : prev));
+    } catch {
+      setOpenSeasons((prev) => (prev[seasonNumber] ? { ...prev, [seasonNumber]: { status: 'error', episodes: [] } } : prev));
+    }
   };
 
   const handleRatingChange = async (rating) => {
@@ -161,6 +180,15 @@ export default function MovieDetailPage({
     }
   };
 
+  const handleListsChange = async (listIds) => {
+    try {
+      setIsSavingLists(true);
+      await onSetLists?.(item.id, listIds);
+    } finally {
+      setIsSavingLists(false);
+    }
+  };
+
   // Goes straight to Trash; the toast that follows offers Undo
   const handleRemove = async () => {
     try {
@@ -176,9 +204,6 @@ export default function MovieDetailPage({
 
   if (!item) return null;
 
-  // The saved list's own icon for the top-right pill (Library when it's in no list)
-  const savedList = lists.find((l) => l.id === item.list);
-  const ListIcon = savedList ? getListIcon(savedList.icon || 'Film') : Library;
 
   // Derived data
   const tv = isTv(movie);
@@ -241,9 +266,9 @@ export default function MovieDetailPage({
 
       {/* ── Top Nav Bar ── */}
       <header className="mdp-topbar">
-        <button type="button" onClick={onBack} className="mdp-back-btn">
+        <button type="button" onClick={onBack} className="mdp-back-btn" aria-label={isPreview ? 'Back' : backLabel}>
           <ArrowLeft size={15} />
-          <span>{isPreview ? 'Back' : 'Back to Movies'}</span>
+          <span>{isPreview ? 'Back' : backLabel}</span>
         </button>
 
         {isPreview ? (
@@ -261,15 +286,18 @@ export default function MovieDetailPage({
           </div>
         ) : (
           <div className="mdp-topbar-right">
-            <div className="mdp-list-pill" title={`Saved in ${item.list_name || 'your library'}`}>
-              <span className="mdp-list-pill__icon"><ListIcon size={12} /></span>
-              <span className="mdp-list-pill__name">{item.list_name || 'Library'}</span>
-            </div>
+            <ListMembershipPicker
+              lists={lists}
+              memberIds={memberListIds}
+              isSaving={isSavingLists}
+              onChange={handleListsChange}
+            />
             <button
               type="button"
               onClick={handleRemove}
               disabled={isRemoving}
               className="mdp-remove-btn"
+              aria-label="Remove"
             >
               <Trash2 size={13} />
               <span>{isRemoving ? 'Removing…' : 'Remove'}</span>
@@ -471,8 +499,15 @@ export default function MovieDetailPage({
                 if (!season.air_date && !total) state = 'Not aired';
                 else if (done) state = 'Watched';
                 else if (watched > 0) state = `${watched} of ${total}`;
+                const opened = openSeasons[season.season_number];
                 return (
-                  <div key={season.season_number} className="mdp-season">
+                  <React.Fragment key={season.season_number}>
+                  <button
+                    type="button"
+                    className={`mdp-season ${opened ? 'is-open' : ''}`}
+                    aria-expanded={Boolean(opened)}
+                    onClick={() => toggleSeason(season.season_number)}
+                  >
                     <div className="mdp-season__poster">
                       {season.poster_path
                         ? <img src={season.poster_path} alt="" loading="lazy" />
@@ -495,7 +530,39 @@ export default function MovieDetailPage({
                         {state}
                       </span>
                     )}
-                  </div>
+                    <ChevronDown size={15} className="mdp-season__chevron" />
+                  </button>
+                  {opened && (
+                    <div className="mdp-episodes">
+                      {opened.status === 'loading' && <p className="mdp-episodes__note"><Loader2 size={13} className="dz-spinner" /> Loading episodes…</p>}
+                      {opened.status === 'error' && <p className="mdp-episodes__note">Couldn't load this season's episodes.</p>}
+                      {opened.status === 'ok' && opened.episodes.length === 0 && <p className="mdp-episodes__note">No episodes listed yet.</p>}
+                      {opened.episodes.map((ep) => {
+                        const isWatched = season.season_number > 0 && watched >= ep.episode_number;
+                        const isCurrent = progress.season === season.season_number && progress.episode === ep.episode_number;
+                        const aired = ep.air_date ? formatAirDate(ep.air_date) : 'Not aired';
+                        const canSet = !isPreview && season.season_number > 0;
+                        return (
+                          <button
+                            key={ep.episode_number}
+                            type="button"
+                            className={`mdp-episode ${isWatched ? 'is-watched' : ''} ${isCurrent ? 'is-current' : ''}`}
+                            disabled={!canSet}
+                            title={canSet ? `Mark watched up to ${episodeCode(season.season_number, ep.episode_number)}` : undefined}
+                            onClick={() => handleProgressChange({ season: season.season_number, episode: ep.episode_number })}
+                          >
+                            <span className="mdp-episode__check">{isWatched && <Check size={11} />}</span>
+                            <span className="mdp-episode__num">E{ep.episode_number}</span>
+                            <span className="mdp-episode__name">{ep.name || `Episode ${ep.episode_number}`}</span>
+                            <span className="mdp-episode__meta">
+                              {[aired, ep.runtime ? `${ep.runtime}m` : ''].filter(Boolean).join(' · ')}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </div>
